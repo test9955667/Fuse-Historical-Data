@@ -25,14 +25,13 @@ function getChainConsts(chain: keyof typeof allInfo) {
  * @param web3 Web3 object to instansiate contract with
  * @returns 
  */
-export function getLens(chain: keyof typeof allInfo, web3: typeof Web3)  {
+export function getLensABI(chain: keyof typeof allInfo)  {
     var chainInfo = getChainConsts(chain);
 
-    var path  = chainInfo["lensAbi"];
-    var abi   = require(path);
-    var addr  = chainInfo["lensAddress"];
+    var abi:  JSON    = require("../assets/" + chainInfo["lensAbi"]);
+    var addr: string  = chainInfo["lensAddress"];
 
-    return new web3.eth.Contract(abi, addr);
+    return { abi , addr };
 }
 
 
@@ -43,13 +42,12 @@ export function getLens(chain: keyof typeof allInfo, web3: typeof Web3)  {
  * @param addr 
  * @returns 
  */
-export function getCtoken(chain: keyof typeof allInfo, web3: typeof Web3, addr: string) {
+export function getCtokenABI(chain: keyof typeof allInfo) {
     var chainInfo = getChainConsts(chain);
 
-    var path = chainInfo["cTokenAbi"];
-    var abi  = require(path);
+    var abi  = require("../assets/" + chainInfo["cTokenAbi"]);
     
-    return new web3.eth.Contract(abi, addr);
+    return abi;
 }
 
 
@@ -61,6 +59,4 @@ export function getCtoken(chain: keyof typeof allInfo, web3: typeof Web3, addr: 
 export function getUrl(chain: keyof typeof allInfo) {
     return getChainConsts(chain)["rpcUrl"];
 }
-
-
 
