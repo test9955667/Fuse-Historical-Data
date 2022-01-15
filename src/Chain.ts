@@ -1,15 +1,12 @@
 const allInfo = require("../assets/NtwrkAssets.json");
-const ethers  = require('ethers');
-const Web3    = require('web3');
-
-
+import ethers from 'ethers';
 
 /**
  * 
  * @param chain 
  * @returns 
  */
-function getChainConsts(chain: keyof typeof allInfo) {
+ function getChainConsts(chain: keyof typeof allInfo) {
     let chainInfo = undefined;
     try {
         chainInfo = allInfo[chain];
@@ -26,30 +23,69 @@ function getChainConsts(chain: keyof typeof allInfo) {
  * @returns 
  */
 export function getLensABI(chain: keyof typeof allInfo)  {
-    var chainInfo = getChainConsts(chain);
+    let chainInfo = getChainConsts(chain);
 
-    var abi:  JSON    = require("../assets/" + chainInfo["lensAbi"]);
-    var addr: string  = chainInfo["lensAddress"];
-
+    let abi = require(("../assets/" + chainInfo["lensAbi"]));
+    let addr = chainInfo["lensAddress"];
     return { abi , addr };
+}
+
+export function getLensABIEthers(chain: keyof typeof allInfo) {
+    let chainInfo = getChainConsts(chain);
+
+    let eth = new ethers.providers.AlchemyProvider(chainInfo["rpcUrl"]);
+
+    let abi = require(("../assets/" + chainInfo["lensAbi"]));
+    let addr = chainInfo["lensAddress"];
+
+    let lens = new ethers.Contract(addr, abi, eth);
+    return lens;
+}
+
+/**
+ * 
+ * @param chain String to search multichain JSON for
+ * @param web3 Web3 object to instansiate contract with
+ * @returns 
+ */
+ export function getDirABI(chain: keyof typeof allInfo)  {
+    let chainInfo = getChainConsts(chain);
+
+    let abi = require(("../assets/" + chainInfo["dirAbi"]));
+    let addr = chainInfo["dirAddress"];
+    return { abi , addr };
+}
+/**
+ * 
+ * @param chain 
+ * @returns 
+ */
+export function getDirEthers(chain: keyof typeof allInfo) {
+    let chainInfo = getChainConsts(chain);
+
+    let eth = new ethers.providers.AlchemyProvider(chainInfo["rpcUrl"]);
+
+    let abi = require(("../assets/" + chainInfo["dirAbi"]));
+    let addr = chainInfo["dirAddress"];
+
+    let dir = new ethers.Contract(addr, abi, eth);
+    return dir;
+
 }
 
 
 /**
  * 
- * @param chain 
- * @param web3 
- * @param addr 
- * @returns 
+ * @param chain  
+ * @returns abi JSON object of abi 
  */
 export function getCtokenABI(chain: keyof typeof allInfo) {
-    var chainInfo = getChainConsts(chain);
+    let chainInfo = getChainConsts(chain);
 
-    var abi  = require("../assets/" + chainInfo["cTokenAbi"]);
+    let abi: any = require("../assets/" + chainInfo["cTokenAbi"]);
     
     return abi;
 }
-
 
 /**
  * 
@@ -59,4 +95,3 @@ export function getCtokenABI(chain: keyof typeof allInfo) {
 export function getUrl(chain: keyof typeof allInfo) {
     return getChainConsts(chain)["rpcUrl"];
 }
-
