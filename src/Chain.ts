@@ -22,10 +22,10 @@ import ethers from 'ethers';
  * @param web3 Web3 object to instansiate contract with
  * @returns 
  */
-export function getLensABI(chain: keyof typeof allInfo)  {
+export function getLensInfo(chain: keyof typeof allInfo)  {
     let chainInfo = getChainConsts(chain);
 
-    let abi = require(("../assets/" + chainInfo["lensAbi"]));
+    let abi  = require(("../assets/" + chainInfo["lensAbi"]));
     let addr = chainInfo["lensAddress"];
     return { abi , addr };
 }
@@ -48,10 +48,10 @@ export function getLensABIEthers(chain: keyof typeof allInfo) {
  * @param web3 Web3 object to instansiate contract with
  * @returns 
  */
- export function getDirABI(chain: keyof typeof allInfo)  {
+ export function getDirInfo(chain: keyof typeof allInfo)  {
     let chainInfo = getChainConsts(chain);
 
-    let abi = require(("../assets/" + chainInfo["dirAbi"]));
+    let abi  = require(("../assets/" + chainInfo["dirAbi"]));
     let addr = chainInfo["dirAddress"];
     return { abi , addr };
 }
