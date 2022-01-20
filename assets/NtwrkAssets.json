@@ -1,6 +1,6 @@
 {
     "ethMain": {
-        "rpcUrl": "https://eth-mainnet.alchemyapi.io/v2/LJVLCa0Ry_071ika2ECrnuP2Idk1Z7kS",
+        "rpcUrl": "https://eth-mainnet.alchemyapi.io/v2/2Mt-6brbJvTA4w9cpiDtnbTo6qOoySnN",
 
         "lensAbi": "ethMain/LensABI.json",
         "lensAddress": "0x6Dc585Ad66A10214Ef0502492B0CC02F0e836eec",
@@ -9,6 +9,8 @@
 
         "dirAbi": "./ethMain/DirABI.json",
         "dirAddress": "0x835482FE0532f169024d5E9410199369aAD5C77E",
+
+        "comptrollerAbi": "ethMain/ComptrollerAbi.json",
 
         "uniPoolABI": "",
         "uniPoolAddress": "",

@@ -1,5 +1,4 @@
 const allInfo = require("../assets/NtwrkAssets.json");
-import ethers from 'ethers';
 
 /**
  * 
@@ -30,17 +29,6 @@ export function getLensInfo(chain: keyof typeof allInfo)  {
     return { abi , addr };
 }
 
-export function getLensABIEthers(chain: keyof typeof allInfo) {
-    let chainInfo = getChainConsts(chain);
-
-    let eth = new ethers.providers.AlchemyProvider(chainInfo["rpcUrl"]);
-
-    let abi = require(("../assets/" + chainInfo["lensAbi"]));
-    let addr = chainInfo["lensAddress"];
-
-    let lens = new ethers.Contract(addr, abi, eth);
-    return lens;
-}
 
 /**
  * 
@@ -54,36 +42,17 @@ export function getLensABIEthers(chain: keyof typeof allInfo) {
     let abi  = require(("../assets/" + chainInfo["dirAbi"]));
     let addr = chainInfo["dirAddress"];
     return { abi , addr };
-}
-/**
- * 
- * @param chain 
- * @returns 
- */
-export function getDirEthers(chain: keyof typeof allInfo) {
+ }
+
+export function getComptrollerInfo(chain: keyof typeof allInfo) {
     let chainInfo = getChainConsts(chain);
-
-    let eth = new ethers.providers.AlchemyProvider(chainInfo["rpcUrl"]);
-
-    let abi = require(("../assets/" + chainInfo["dirAbi"]));
-    let addr = chainInfo["dirAddress"];
-
-    let dir = new ethers.Contract(addr, abi, eth);
-    return dir;
-
+    let abi: any = require("../assets/" + chainInfo["comptrollerAbi"]);
+    return abi;
 }
 
-
-/**
- * 
- * @param chain  
- * @returns abi JSON object of abi 
- */
-export function getCtokenABI(chain: keyof typeof allInfo) {
+export function getCTokenInfo(chain: keyof typeof allInfo) {
     let chainInfo = getChainConsts(chain);
-
     let abi: any = require("../assets/" + chainInfo["cTokenAbi"]);
-    
     return abi;
 }
 

@@ -1,27 +1,35 @@
+import path from "path/posix";
 import Web3 from "web3";
 import { AbiItem } from 'web3-utils';
-import { getUrl, getLensInfo, getDirInfo, getCtokenABI } from "./Chain";
+import { 
+    getUrl, 
+    getLensInfo, 
+    getDirInfo, 
+    getComptrollerInfo, 
+    getCTokenInfo 
+} from "./Chain";
 
 const genesis  = 12060711; // genesis block of fuse
 
 const url  = getUrl("ethMain");
 const web3 = new Web3(new Web3.providers.HttpProvider(url));
 
-
+entry();
 async function entry() {
     // 1) get the last time updated
     // 2) sync 
     // 3) maintain 
+    await sync(genesis, false);
 }
 
 /**
  * @dev Syncs the  inline with the current block, 
  * then passes 
  */
-async function sync(startBlock: number) {
+async function sync(startBlock: number, exactTime: boolean) { //TODO; add chain spec here and reference it instead of literal
 
 // ============ CONTRACT INSTANCES =========== // 
-
+    console.log("test");
     let dResult = getDirInfo("ethMain");
     let dir     = new web3.eth.Contract(
         dResult["abi"] as AbiItem[],
@@ -34,23 +42,26 @@ async function sync(startBlock: number) {
         lResult["addr"]
     );
 
-// ===== ORDER POOLS BY BLOCK DEPLOYED ====== //
-    let pools = await dir.methods.getPublicPools().call()
-    .then(console.log); // TODO: figure out issue, might be using old ABI 
+    let cmpABI  = getComptrollerInfo("ethMain"); 
+    let ctkABI  = getCTokenInfo("ethMain");
 
-    let poolsBlockList = []; 
+// ===== ORDER POOLS BY BLOCK DEPLOYED ====== //
+    let pools = await dir.methods.getPublicPools().call();
+
+    let poolsBlockList: number[] = []; 
     let poolBlockMap = new Map(); // key: blockDeployed, value: comptrollerAddress
     for(let i = 0; i < pools[1].length; i++) {
-        poolBlockMap.set(pools[1][3], pools[1][2]); // TODO: switch 3 to for if timespamp is better than block!!! 
-        // i have no idea 
-        poolsBlockList.push(pools[1][3]);
+        poolBlockMap.set(pools[1][i].blockPosted, pools[1][i].comptroller); // TODO: switch 3 to for if timespamp is better than block!!! 
+        poolsBlockList.push(pools[1][i].blockPosted);
     }
-    poolsBlockList.sort(); // TODO: test 
-    console.log(poolsBlockList);
+    poolsBlockList.sort();
 
 
-// ============= ????? ============== // 
-    let tokenMap = new Map(); // key: cTokenAddress, value cTokenInstance
+
+// ======== LOAD POOLS/TOKENS EFFICIENTLY ========= // 
+    let poolContractMap = new Map(); // key: cTokenAddress, value cTokenInstance
+    let cTokenMap = new Map();
+
 
 // =============  INITIAL TIME VALUES =========== //  
     let poolCount = 0;
@@ -59,37 +70,62 @@ async function sync(startBlock: number) {
     let endBlock  = await web3.eth.getBlockNumber();
 
 // ============ GET HISTORIC LIQUIDITY ========== //
-    for(currBlock; currBlock < endBlock; currBlock++) {
-
-        let currTime = (await web3.eth.getBlock(currBlock)).timestamp;
-
-        if(currTime < previous + 1800 ) { continue; }
-        previous += 1800;
-
-        // adds next pool to query if its been deployed
+    while(currBlock < endBlock) {
+        if(!exactTime) { currBlock += 140; } 
+        else {
+            let currTime = (await web3.eth.getBlock(currBlock)).timestamp;
+            currBlock++;
+            if(currTime < previous + 1800 ) { continue; } 
+            previous += 1800; 
+        } 
         while(currBlock >= poolsBlockList[poolCount]) { poolCount++; }
-        
-        // Iterates through pools to get their cTokens and 
+
+        lens.defaultBlock = currBlock;
+        // Iterates through pools to get their cTokens 
         for(let j = 0; j < poolCount; j++) {
-            let pAddr = poolBlockMap.get(poolsBlockList[poolCount]);
-            let cTokens = lens.methods.getPoolSummary(pAddr)[2]; // TODO: call for block
+            let pAddr = poolBlockMap.get(poolsBlockList[j]);
+
+            let pool = undefined;
+            if(poolContractMap.get(pAddr) != null) {
+                pool = poolContractMap.get(pAddr);
+            } else {
+                poolContractMap.set(pAddr, new web3.eth.Contract(cmpABI, pAddr));
+                pool = poolContractMap.get(pAddr);
+            }
+            let poolString = {
+                "Pool": pAddr,
+                "Block": lens.defaultBlock,
+                "cTokens": [{
+                    "Token": "",
+                    "Supply": ""
+                } ]
+            }
+            
+            let cTokens = await pool.methods.getAllMarkets().call(); // TODO: should i deploy a contract? 
             for(let k = 0; k < cTokens.length; k++) {
                 let cAddr = cTokens[k];
-                let cToken = undefined;
 
-                if(tokenMap.get(cAddr) != null) {
-                    cToken = tokenMap.get(cAddr); 
+                let token = undefined;
+                if(cTokenMap.get(cAddr) != null) {
+                    token = cTokenMap.get(cAddr);
                 } else {
-                    cToken = new web3.eth.Contract(getCtokenABI("ethMain"), cAddr);
-                    tokenMap.set(cAddr, cToken); 
+                    cTokenMap.set(
+                        cTokens[k], 
+                        new web3.eth.Contract(ctkABI,cAddr)
+                    );
+                    token = cTokenMap.get(cAddr);
                 }
-                let underlying = await cToken.underlying.call();// TODO: how to get underlying address?
-                // TODO: check if its ether
-                let liquidity = await cToken.methods.totalSupply().call(); 
-                
 
-                writeCToken(cAddr, underlying, currTime, liquidity); // TODO: verify validity of call
+                token.defautBlock = currBlock;
+                let supply = await token.methods.totalSupply().call();
+                poolString.cTokens.push({Token: cAddr, Supply: supply});
+
+                //writeCToken(cAddr, )
+                
             }
+            console.log(poolString);
+            // The lens takes the comptroller object (pool), list of ctokens(cTokens)
+
         }
         endBlock = await web3.eth.getBlockNumber();
     }

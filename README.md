@@ -1,5 +1,6 @@
 # Fuse-Historical-Data
  
+##### ! use ts-node btw, hand/make compilation doesnt work !  
 1) make sure in tsconfig.js to set "resolveJsonModule": true
 2) include env file and export const env with required values 
 in line 7 of: ./src/Index.ts
