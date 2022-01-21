@@ -62,6 +62,8 @@ async function sync(startBlock: number, exactTime: boolean) { //TODO; add chain 
     let poolContractMap = new Map(); // key: cTokenAddress, value cTokenInstance
     let cTokenMap = new Map();
 
+    // let cTokenEvents = new Map(); // events branch
+
 
 // =============  INITIAL TIME VALUES =========== //  
     let poolCount = 0;
@@ -114,6 +116,8 @@ async function sync(startBlock: number, exactTime: boolean) { //TODO; add chain 
                         new web3.eth.Contract(ctkABI,cAddr)
                     );
                     token = cTokenMap.get(cAddr);
+                    // let events = await token.getPastEvents(); events branch
+                    // cTokenEvents.set(cAddr, events);
                 }
 
                 token.defautBlock = currBlock;
