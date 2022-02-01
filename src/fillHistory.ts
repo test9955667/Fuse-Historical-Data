@@ -1,108 +1,139 @@
-import path from "path/posix";
 import Web3 from "web3";
 import { AbiItem } from 'web3-utils';
-import { 
-    getUrl, 
-    getLensInfo, 
-    getDirInfo, 
-    getComptrollerInfo, 
-    getCTokenInfo 
-} from "./Chain";
+import { Contract } from "web3-eth-contract";
+import { networkMemory } from "./networkMemory";
+import * as ntwk from "./ChainParse";
 
-const genesis  = 12060711; // genesis block of fuse
+import { CHAINID, networks } from "../assets/Networks"
 
-const url  = getUrl("ethMain");
-const web3 = new Web3(new Web3.providers.HttpProvider(url));
+import * as db from './Index';
 
-entry();
-async function entry() {
-    // 1) get the last time updated
-    // 2) sync 
-    // 3) maintain 
-    await sync(genesis, false);
+
+let networkNames: number[] = [];
+let networkMap: Map<number, networkMemory> = new Map();
+
+let chain = 0;
+
+// Type of token data to enter
+type tokenEntry = {
+    network: number,
+    name: string,
+    supply: BigInt,
+    borrow: BigInt,
+    liquidity: BigInt,
+}
+
+type contractInfo = {
+    abi: AbiItem[],
+    addr: string
+}
+
+type network = { network: keyof typeof CHAINID }
+
+entry([{network: "ETHEREUM"}], false);
+
+async function entry(networks: network[], exactTime: boolean) {
+    
+    for(let i = 0; i < networks.length; i++) {
+        let chain = CHAINID[networks[i].network];
+        let lensInfo: contractInfo = ntwk.getLensInfo(chain);
+        let dirInfo = ntwk.getDirInfo(chain);
+        let comptrollerInfo = ntwk.getComptrollerInfo(chain);
+        let cTokenInfo = ntwk.getCTokenInfo(chain);
+        let genesis = ntwk.getGenesis(chain);
+        let blocks = ntwk.getBlocks(chain);
+        let lastUpdated = await db.getBlockLastUpdated(chain);
+        let web3 = new Web3(new Web3.providers.HttpProvider(ntwk.getUrl(chain)));
+        networkNames.push(chain);
+        let network = new networkMemory(chain, genesis, blocks, dirInfo, lensInfo, comptrollerInfo, cTokenInfo, lastUpdated, web3);
+        networkMap.set(chain, network);
+
+        console.log(chain);
+        getOrSetUnderlying(chain, lensInfo.addr);
+        return;
+        await sync(chain, exactTime);
+    }
+
+
+
 }
 
 /**
  * @dev Syncs the  inline with the current block, 
  * then passes 
  */
-async function sync(startBlock: number, exactTime: boolean) { //TODO; add chain spec here and reference it instead of literal
+async function sync(chain: number, exactTime: boolean) { //TODO; add chain spec here and reference it instead of literal
 
 // ============ CONTRACT INSTANCES =========== // 
-    console.log("test");
-    let dResult = getDirInfo("ethMain");
-    let dir     = new web3.eth.Contract(
-        dResult["abi"] as AbiItem[],
-        dResult["addr"]
-    );
+    
+    let mem  = networkMap.get(chain);
+    if(!mem) {return}
 
-    let lResult = getLensInfo("ethMain");
-    let lens    = new web3.eth.Contract(
-        lResult["abi"] as AbiItem[],
-        lResult["addr"]
-    );
-
-    let cmpABI  = getComptrollerInfo("ethMain"); 
-    let ctkABI  = getCTokenInfo("ethMain");
+    let dir     = mem.directory;
+    let lens    = mem.lens;
 
 // ===== ORDER POOLS BY BLOCK DEPLOYED ====== //
-    let pools = await dir.methods.getPublicPools().call();
-
+    let pools = await mem.directory.methods.getPublicPools().call();
     let poolsBlockList: number[] = []; 
-    let poolBlockMap = new Map(); // key: blockDeployed, value: comptrollerAddress
+    let poolBlockMap = new Map();; // key: blockDeployed, value: comptrollerAddress
     for(let i = 0; i < pools[1].length; i++) {
-        poolBlockMap.set(pools[1][i].blockPosted, pools[1][i].comptroller); // TODO: switch 3 to for if timespamp is better than block!!! 
-        poolsBlockList.push(pools[1][i].blockPosted);
+            poolBlockMap.set(pools[1][i].blockPosted, pools[1][i].comptroller); 
+            poolsBlockList.push(pools[1][i].blockPosted);
     }
+    mem.poolBlockMap = poolBlockMap;
     poolsBlockList.sort();
 
 
-
 // ======== LOAD POOLS/TOKENS EFFICIENTLY ========= // 
-    let poolContractMap = new Map(); // key: cTokenAddress, value cTokenInstance
-    let cTokenMap = new Map();
-
+    let poolContractMap = mem.poolContractMap; // key: cTokenAddress, value cTokenInstance
+    let cTokenMap = mem.cTokenMap;
     // let cTokenEvents = new Map(); // events branch
-
-
+    let underlyingMap: Map<string, string> = new Map(); // key: cTokenAddress, value: underlyingAddress
 // =============  INITIAL TIME VALUES =========== //  
     let poolCount = 0;
-    let previous  = Number((await web3.eth.getBlock(startBlock)).timestamp);
-    let currBlock = startBlock;
-    let endBlock  = await web3.eth.getBlockNumber();
+    let previous  = Number((await mem.web3.eth.getBlock(mem.GENESIS)).timestamp);
+    let currBlock = mem.lastUpdated;
+    console.log(currBlock);
+
+    let endBlock  = await mem.web3.eth.getBlockNumber();
 
 // ============ GET HISTORIC LIQUIDITY ========== //
     while(currBlock < endBlock) {
-        if(!exactTime) { currBlock += 140; } 
+        if(!exactTime) { currBlock += mem.BLOCKS; } 
         else {
-            let currTime = (await web3.eth.getBlock(currBlock)).timestamp;
+            let currTime = (await mem.web3.eth.getBlock(currBlock)).timestamp;
             currBlock++;
             if(currTime < previous + 1800 ) { continue; } 
             previous += 1800; 
         } 
         while(currBlock >= poolsBlockList[poolCount]) { poolCount++; }
-
+        let timestamp = (await mem.web3.eth.getBlock(currBlock)).timestamp;
         lens.defaultBlock = currBlock;
+
         // Iterates through pools to get their cTokens 
+        let tokensToPush: tokenEntry[] = [];
         for(let j = 0; j < poolCount; j++) {
-            let pAddr = poolBlockMap.get(poolsBlockList[j]);
+            /*////////////////////////////////////////////////////
+            Get pool instance and set it in memory if not already 
+            //////////////////////////////////////////////////*/
+            let pAddr = mem.poolBlockMap.get(poolsBlockList[j]);
+            if(pAddr == undefined) { continue; }
 
             let pool = undefined;
             if(poolContractMap.get(pAddr) != null) {
                 pool = poolContractMap.get(pAddr);
             } else {
-                poolContractMap.set(pAddr, new web3.eth.Contract(cmpABI, pAddr));
+                // instansiates new pool and adds it to memory
+                poolContractMap.set(pAddr, new mem.web3.eth.Contract(mem.POOL_ABI, pAddr));
                 pool = poolContractMap.get(pAddr);
-            }
-            let poolString = {
-                "Pool": pAddr,
-                "Block": lens.defaultBlock,
-                "cTokens": [{
-                    "Token": "",
-                    "Supply": ""
-                } ]
-            }
-            
+                mem.poolContractMap = poolContractMap; 
+            } if(pool == undefined) { continue; }
+
+
+            /*///////////////////////////////////////////////////
+            Iterates through cTokens to write data for currBlock
+            /////////////////////////////////////////////////*/
+
             let cTokens = await pool.methods.getAllMarkets().call(); // TODO: should i deploy a contract? 
             for(let k = 0; k < cTokens.length; k++) {
                 let cAddr = cTokens[k];
@@ -111,31 +142,68 @@ async function sync(startBlock: number, exactTime: boolean) { //TODO; add chain 
                 if(cTokenMap.get(cAddr) != null) {
                     token = cTokenMap.get(cAddr);
                 } else {
+                    // instantiates new cToken and adds it to memory
                     cTokenMap.set(
                         cTokens[k], 
-                        new web3.eth.Contract(ctkABI,cAddr)
+                        new mem.web3.eth.Contract(mem.TOK_ABI,cAddr)
                     );
                     token = cTokenMap.get(cAddr);
+                    mem.cTokenMap = cTokenMap;
                     // let events = await token.getPastEvents(); events branch
                     // cTokenEvents.set(cAddr, events);
+                } if(token == undefined) { continue; }
+
+                token.defaultBlock = currBlock;
+                let supply = undefined;
+                let borrow = undefined;
+                let liquid = undefined;
+                try {
+                supply = await token.methods.totalSupply().call();
+                borrow = await token.methods.totalBorrows().call();
+                liquid = await token.methods.getCash().call();
+                } catch(e) {
+                    throw new Error(`${cAddr} failed to load`);
                 }
 
-                token.defautBlock = currBlock;
-                let supply = await token.methods.totalSupply().call();
-                poolString.cTokens.push({Token: cAddr, Supply: supply});
-
-                //writeCToken(cAddr, )
+                tokensToPush.push({"network": chain, "name": cAddr, "supply": supply, "borrow": borrow , "liquidity": liquid});
+                // gets underlying address for cToken and saves it to memory if not already there
+                try{
+                let underlying = getOrSetUnderlying(chain, cAddr);
+                } catch(e) {
+                    console.log(e);
+                    continue;
+                }
                 
-            }
-            console.log(poolString);
-            // The lens takes the comptroller object (pool), list of ctokens(cTokens)
 
+            }
+            for(let i = 0; i < tokensToPush.length; i++) {
+                let tok = tokensToPush[i];
+                writeToken(chain, tok.name, timestamp, tok.supply, tok.borrow, tok.liquidity); // todo fix this shit bruh
+            }
+            tokensToPush = [];
         }
-        endBlock = await web3.eth.getBlockNumber();
+        await db.setBlockLastUpdated(chain, BigInt(currBlock));
+        endBlock = await mem.web3.eth.getBlockNumber();
     }
+    
 }
 
+async function getAllPools() {
+    // take pool logic out of sync and place it here 
+}
 
+async function getPoolTokenInfo(block: number) {
+    // take token logic out of sync and place it here    
+    
+}
+
+async function getCurrentBlock(network: string, web3: any,) {
+    // 1) get pools from chain
+    // 2) get ctokens for each pool 
+    // for each ctoken,
+    // 1) do underling check
+
+}
 
 /**
  * 
@@ -144,12 +212,8 @@ async function sync(startBlock: number, exactTime: boolean) { //TODO; add chain 
  * @param timestamp timestamp of query 
  * @param liquidity liquidity *after* decimals to 1e18 
  */
-function writeCToken(addr: string, under: string, timestamp: string | number, liquidity: BigInt) {
-    // TODO: set up schema
-    
-    // if hypertable exists for addr, then add entry,
-    // else create hypertable and add entry
-    // add liquidity 
+function writeToken(chain: number, addr: string, timestamp: string | number, supply: BigInt, borrow: BigInt, liquidity: BigInt) {
+   db.addCTokenData(chain, addr, timestamp, supply, borrow);
 }
 
 function writeUnderlying(addr: string, timestamp: BigInt) {
@@ -157,6 +221,44 @@ function writeUnderlying(addr: string, timestamp: BigInt) {
 
     // if hypertable exists for addr, write entry
 }
+
+// Helper function to get the underlying for a cToken, 
+// if not in memory or storage it get it from chain 
+// and enters it into the metadata of the db 
+async function getOrSetUnderlying(chain: number, cAddr: string) {
+    let mem = networkMap.get(chain);
+
+    // IMPL #1
+    if(mem?.underlyingMap.get(cAddr) != null) {
+        return mem.underlyingMap.get(cAddr);
+    } else {
+        let under = await db.getUnderlyingOfCToken(chain, cAddr);
+        if(under == "") { // TODO: test
+            let contract = mem?.cTokenMap.get(cAddr);
+            if(contract == undefined) { 
+                throw new Error("cToken contract not found"); 
+            }
+            under = await contract.methods.underlying().call();
+            await db.addUnderlyingToCToken(chain, cAddr, under);
+            await db.addCTokenToUnderlying(chain, under, cAddr);
+            mem?.underlyingMap.set(cAddr, under);
+        }
+        return under;
+    }
+
+    // IMPL #2
+    /* 
+    let underlying = mem?.underlyingMap.get(cAddr) != null ? mem.underlyingMap.get(cAddr) : await getUnderlyingOfCToken(chain, cAddr)
+    .then(res => {mem?.underlyingMap.set(cAddr, res); return res;})
+    .catch(err => {throw new Error(`failed to get underlying of ${cAddr}`);});
+    if(underlying == "") {
+
+    }
+    */
+ 
+}
+
+
 
 async function syncEth() {
     return;
@@ -166,6 +268,9 @@ async function syncEth() {
 
     // if
 }
+
+
+
 
 
 

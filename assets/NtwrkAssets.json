@@ -1,6 +1,11 @@
 {
+<<<<<<< Updated upstream
     "ethMain": {
         "rpcUrl": "https://eth-mainnet.alchemyapi.io/v2/2Mt-6brbJvTA4w9cpiDtnbTo6qOoySnN",
+=======
+    "1": {
+        "rpcUrl": "https://eth-mainnet.alchemyapi.io/v2/LJVLCa0Ry_071ika2ECrnuP2Idk1Z7kS",
+>>>>>>> Stashed changes
 
         "lensAbi": "ethMain/LensABI.json",
         "lensAddress": "0x6Dc585Ad66A10214Ef0502492B0CC02F0e836eec",
@@ -11,6 +16,10 @@
         "dirAddress": "0x835482FE0532f169024d5E9410199369aAD5C77E",
 
         "comptrollerAbi": "ethMain/ComptrollerAbi.json",
+
+        "blocksIn30": 140,
+
+        "genesisBlock": 12060711,
 
         "uniPoolABI": "",
         "uniPoolAddress": "",
@@ -42,13 +51,19 @@
     },
     
     "Arbitrum": {
-        "rpcUrl": "",
+        "rpcUrl": "https://arb-mainnet.g.alchemy.com/v2/rNfYbx5O5Ng09hw9s9YE-huxzVNaWWbX",
         
         "lensAbi": "./Arbitrum/LensABI.json",
-        "lensAddress": "",
+        "lensAddress": "0xD6e194aF3d9674b62D1b30Ec676030C23961275e",
         
         "dirAbi": "./Arbitrum/DirABI.json",
-        "dirAddress": "",
+        "dirAddress": "0xc201b8c8dd22c779025e16f1825c90e1e6dd6a08",
+
+        "cTokenAbi": "ethMain/CTokenAbi.json",
+        "comptrollerAbi": "ethMain/ComptrollerAbi.json",
+
+        "blocksIn30": 1800,
+        "genesisBlock": 4722015,
 
         "uniPoolABI": "",
         "uniPoolAddress": "",

@@ -8,4 +8,15 @@ in line 7 of: ./src/Index.ts
 4) `npx sequelize init`
 5) `npx sequelize db:create node_test` (creates db)
 6) `npx sequelize migration:generate --name add_tsdb_extension`
-7) 
+
+
+# TODO
+1) change nomenclature []  
+2) add liquidity and total borrow []
+3) add endpoints []
+4) enable upserts for existing data and adding new fields []
+5) add underlying tokens 
+6) (optional) use event logs to prevent unnecessary calls (this logic can be implemented in future fuse leverage position history) 
+7) figure out arbitrum RPC issues
+8) clean up network file, copy from sdk
+9) (do 4th) comment and clean code

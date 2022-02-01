@@ -1,5 +1,5 @@
 const allInfo = require("../assets/NtwrkAssets.json");
-
+import { AbiItem } from 'web3-utils';
 /**
  * 
  * @param chain 
@@ -24,11 +24,10 @@ const allInfo = require("../assets/NtwrkAssets.json");
 export function getLensInfo(chain: keyof typeof allInfo)  {
     let chainInfo = getChainConsts(chain);
 
-    let abi  = require(("../assets/" + chainInfo["lensAbi"]));
-    let addr = chainInfo["lensAddress"];
+    let abi:  AbiItem[] = require(("../assets/" + chainInfo["lensAbi"]));
+    let addr: string    = chainInfo["lensAddress"];
     return { abi , addr };
 }
-
 
 /**
  * 
@@ -39,8 +38,8 @@ export function getLensInfo(chain: keyof typeof allInfo)  {
  export function getDirInfo(chain: keyof typeof allInfo)  {
     let chainInfo = getChainConsts(chain);
 
-    let abi  = require(("../assets/" + chainInfo["dirAbi"]));
-    let addr = chainInfo["dirAddress"];
+    let abi:  AbiItem[]  = require(("../assets/" + chainInfo["dirAbi"]));
+    let addr: string     = chainInfo["dirAddress"];
     return { abi , addr };
  }
 
@@ -56,6 +55,16 @@ export function getCTokenInfo(chain: keyof typeof allInfo) {
     return abi;
 }
 
+export function getGenesis(chain: keyof typeof allInfo) {
+    let chainInfo = getChainConsts(chain);
+    return chainInfo["genesisBlock"];
+}
+
+export function getBlocks(chain: keyof typeof allInfo) {
+    let chainInfo = getChainConsts(chain);
+    return chainInfo["blocksIn30"];
+}
+
 /**
  * 
  * @param chain 
@@ -64,3 +73,5 @@ export function getCTokenInfo(chain: keyof typeof allInfo) {
 export function getUrl(chain: keyof typeof allInfo) {
     return getChainConsts(chain)["rpcUrl"];
 }
+
+
