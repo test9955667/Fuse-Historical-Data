@@ -99,33 +99,6 @@ export async function addCTokenData(
     }
 }
 
-async function addUnderlyingData(chain: number, address: string, datetime: string, totalSupply: BigInt, totalBorrow: BigInt, liquidity: BigInt) {
-    // 1) check if token exists 
-    // 2) if not create table 
-    // 3) add info to table at datetime
-    // 4) add datetime as value for table name for last called
-    let id = chain+address;
-    
-    await addTable(id);
-    try {
-        let quer = `INSERT 
-                        token_info.`+id+`(datetime, totalsupply, totalborrow, liquidity)
-                        VALUES($1,$2,$3,$4)
-                        ON CONFLICT(datetime) DO NOTHING 
-                        ;` // TODO: on conflict ADD
-
-        let response = await pool.query(
-            quer,
-            [datetime, totalSupply, totalBorrow, liquidity]
-        );
-        console.log(response);
-    } catch (err) {
-        console.log(err);
-        throw new Error("error writing to " + id);
-    }
-}
-
-
 
 // sets new table for token data
 async function addTable(id: string) {
@@ -142,7 +115,6 @@ async function addTable(id: string) {
         throw new Error("error creating table if not exists");
     }
 }
-
 
 
 // gets the last synced block for a given network

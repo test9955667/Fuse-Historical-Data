@@ -33,6 +33,8 @@ type network = { network: keyof typeof CHAINID }
 entry([{network: "ETHEREUM"}], false);
 
 async function entry(networks: network[], exactTime: boolean) {
+
+    // TODO: IMPORTANT flush the underlying db at the most recent block if reload!
     
     for(let i = 0; i < networks.length; i++) {
         let chain = CHAINID[networks[i].network];
@@ -178,7 +180,8 @@ async function sync(chain: number, exactTime: boolean) { //TODO; add chain spec 
             }
             for(let i = 0; i < tokensToPush.length; i++) {
                 let tok = tokensToPush[i];
-                writeToken(chain, tok.name, timestamp, tok.supply, tok.borrow, tok.liquidity); // todo fix this shit bruh
+                db.addCTokenData(chain, tok.name, timestamp, tok.supply, tok.borrow, tok.liquidity, true); // todo fix this shit bruh
+                db.addCTokenData(chain, tok.name, timestamp, tok.supply, tok.borrow, tok.liquidity, false);
             }
             tokensToPush = [];
         }
@@ -205,22 +208,7 @@ async function getCurrentBlock(network: string, web3: any,) {
 
 }
 
-/**
- * 
- * @param addr address of cToken
- * @param under address of underlying
- * @param timestamp timestamp of query 
- * @param liquidity liquidity *after* decimals to 1e18 
- */
-function writeToken(chain: number, addr: string, timestamp: string | number, supply: BigInt, borrow: BigInt, liquidity: BigInt) {
-   db.addCTokenData(chain, addr, timestamp, supply, borrow);
-}
 
-function writeUnderlying(addr: string, timestamp: BigInt) {
-    // TODO: set up schema
-
-    // if hypertable exists for addr, write entry
-}
 
 // Helper function to get the underlying for a cToken, 
 // if not in memory or storage it get it from chain 
