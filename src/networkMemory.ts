@@ -47,10 +47,10 @@ export class networkMemory {
     constructor(
         web3:        Web3,
         chain:       number,
-        geneis:      number,
         blocks:      number,
+        tokABI:      AbiItem[], 
         cmpABI:      AbiItem[],
-        tokABI:      AbiItem[],
+        genesis:     number,
         dirInfo:     contractInfo,
         lensInfo:    contractInfo,
         lastUpdated: number,
@@ -59,7 +59,7 @@ export class networkMemory {
         // CONSTANT INIT
         this.CHAIN    = chain;
         this.BLOCKS   = blocks;
-        this.GENESIS  = geneis;
+        this.GENESIS  = genesis;
         this.TOK_ABI  = tokABI;
         this.POOL_ABI = cmpABI;
         

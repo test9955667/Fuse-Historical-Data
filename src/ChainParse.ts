@@ -43,13 +43,13 @@ export function getLensInfo(chain: keyof typeof allInfo)  {
     return { abi , addr };
  }
 
-export function getComptrollerInfo(chain: keyof typeof allInfo) {
+export function getComptrollerABI(chain: keyof typeof allInfo) {
     let chainInfo = getChainConsts(chain);
     let abi: any = require("../assets/" + chainInfo["comptrollerAbi"]);
     return abi;
 }
 
-export function getCTokenInfo(chain: keyof typeof allInfo) {
+export function getCTokenABI(chain: keyof typeof allInfo) {
     let chainInfo = getChainConsts(chain);
     let abi: any = require("../assets/" + chainInfo["cTokenAbi"]);
     return abi;
