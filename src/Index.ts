@@ -199,11 +199,16 @@ export async function getCTokensOfUnderlying(network: number, underlying: string
 }
 
 // TODO: reset latest block for all networks
-export async function clearTokenAtRow(chain: number, token: string, timestamp: string | number) {
+export async function clearLastRow(chain: number, token: string) {
     let id = chain+token;
+    let queryTime = await pool.query(`
+        SELECT datetime FROM token_info.`+id+`
+        ORDER BY datetime DESC LIMIT 1;`); // TODO: test
+    let time = queryTime.rows[0].datetime;
     let query = await pool.query(`
         DELETE FROM token_info.`+id+`
-        WHERE datetime = $2;`
+        WHERE datetime = $1;`,
+        [time]
         );
     console.log(query);
 }

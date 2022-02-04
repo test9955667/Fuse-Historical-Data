@@ -7,6 +7,7 @@ import * as ntwk from "./ChainParse";
 import { CHAINID, networks } from "../assets/Networks"
 
 import * as db from './Index';
+import { time } from "console";
 
 
 let networkNames: number[] = [];
@@ -119,18 +120,18 @@ async function sync(chain: number, exactTime: boolean) { //TODO; add chain spec 
                 // gets and or sets ctoken instance and underlying address
                 let token = await getCTokenInfo(cAddr, mem);
                 let under = await getAndSetUnderlying(cAddr, mem, token);
+                if(under == undefined) { continue; }
 
                 // get block-specific data for cToken 
                 token.defaultBlock = currBlock;
-          
                 try {
                 let supply = await token.methods.totalSupply().call();
                 let borrow = await token.methods.totalBorrows().call();
                 let liquid = await token.methods.getCash().call();
-
+                // write data to cToken
                 db.addCTokenData(chain, cAddr, timestamp, supply, borrow, liquid, true);
+                // write data to underyling 
                 db.addCTokenData(chain, under, timestamp, supply, borrow, liquid, false);
-
                 } catch(e) {
                     throw new Error(`${cAddr} failed to load`);
                 }
@@ -186,14 +187,18 @@ async function getCTokenInfo(cAddr: string, mem: networkMemory) {
     return cToken;
 }
 
-// Helper function to get the underlying for a cToken, 
-// if not in memory or storage it get it from chain 
-// and enters it into the metadata of the db 
+/**
+ * @notice helper function to get or set underlying address for cToken from memory / db
+ * @param cAddr   cToken address
+ * @param mem     network memory instance to read / write
+ * @param cToken  cToken contract instance to query underlying address
+ * @returns under underlying address
+ */
 async function getAndSetUnderlying(cAddr: string, mem: networkMemory, cToken: Contract) {
     let under = mem.underlyingMap.get(cAddr);
    
     // IMPL #1
-    if(under == null) {
+    if(under == undefined) {
         under = await db.getUnderlyingOfCToken(mem.CHAIN, cAddr);
         if(under == undefined || under == "") { // TODO: test
             under = await cToken.methods.underlying().call();
@@ -210,21 +215,10 @@ async function getAndSetUnderlying(cAddr: string, mem: networkMemory, cToken: Co
     } 
     if(i >= cTokens.length) {
         await db.addCTokenToUnderlying(chain, under, cAddr);
-    }
-
     } 
+
     return under;
-
-    // IMPL #2
-    /* 
-    let underlying = mem?.underlyingMap.get(cAddr) != null ? mem.underlyingMap.get(cAddr) : await getUnderlyingOfCToken(chain, cAddr)
-    .then(res => {mem?.underlyingMap.set(cAddr, res); return res;})
-    .catch(err => {throw new Error(`failed to get underlying of ${cAddr}`);});
-    if(underlying == "") {
-
-    }
-    */
- 
+}
 }
 
 
@@ -236,27 +230,24 @@ async function getAndSetPool(pAddr: string, mem: networkMemory) {
     }
     return pool;
 }
-// clears most recent underlying updates to prevent duplicate data
-// gets last updated then adds mem.block (interval) to it 
-async function clearUnderlying(chain: number, blockInterval: number, mem: networkMemory) {
-    let block = await db.getBlockLastUpdated(chain) + blockInterval;
-    let timestamp = (await mem.web3.eth.getBlock(block)).timestamp;
-    let i;
-    for(i = 0; i < mem.poolsBlockList.length; i++) {
-        while(mem.poolsBlockList[i] >= block) {
+
+
+/**
+ * @notice clears most recent underlying updates to prevent duplicate data
+ * @param chain 
+ * @param blockInterval 
+ * @param mem 
+ */
+async function clearUnderlying(time: number, blockInterval: number, mem: networkMemory, exact: boolean) {
+    let lastBlock = await db.getBlockLastUpdated(mem.CHAIN);
+    let timestamp = (await mem.web3.eth.getBlock(lastBlock)).timestamp;
+
+    for(let i = 0; i < mem.poolsBlockList.length; i++) {
             let pAddr = mem.poolBlockMap.get(mem.poolsBlockList[i]);
             if (pAddr == null) continue; // compiler safety, not possible
-            await db.clearTokenAtRow(chain, pAddr, timestamp);
-            // TODO: finish implementation 
-            i++;
-        }
-        
-    }
-
-
-    
+            await db.clearLastRow(mem.CHAIN, pAddr);
+    }  
 }
-
 
 
 async function syncEth() {
@@ -267,9 +258,3 @@ async function syncEth() {
 
     // if
 }
-
-
-
-
-
-
