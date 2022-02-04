@@ -1,4 +1,4 @@
-import { AbiItem } from "web3-utils";
+import { AbiItem  } from "web3-utils";
 import { Contract } from "web3-eth-contract";
 import Web3 from "web3";
 
@@ -9,6 +9,10 @@ type contractInfo = {
 
 // used to read / write memory easily without redundant object initialization and chain/db searching
 export class networkMemory {
+
+    /*////////////////////
+         DECLARATIONS
+    ////////////////////*/
 
     // UNINITIALIZED DECS
     poolsBlockList: number[] = [];
@@ -35,6 +39,11 @@ export class networkMemory {
     poolContractMap: Map<string, Contract>; // key: poolAddress, value pool contract instance
     //cTokenEvents:  Map<>; // events branch
 
+
+    /*////////////////////
+          CONSTRUCTOR
+    ////////////////////*/
+
     constructor(
         web3:        Web3,
         chain:       number,
@@ -45,8 +54,8 @@ export class networkMemory {
         dirInfo:     contractInfo,
         lensInfo:    contractInfo,
         lastUpdated: number,
+    ) {
 
-        ) {
         // CONSTANT INIT
         this.CHAIN    = chain;
         this.BLOCKS   = blocks;
@@ -68,4 +77,6 @@ export class networkMemory {
         this.underlyingMap   = new Map();
         this.poolContractMap = new Map();
     }
+
+
 }
