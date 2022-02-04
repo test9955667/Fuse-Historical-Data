@@ -169,10 +169,10 @@ export async function getUnderlyingOfCToken(network: number, cToken: string) {
 // sets another cToken corresponding to underlying
 export async function addCTokenToUnderlying(network: number, underlying: string, cToken: string) {
     let id = network+underlying;
-
+    // TODO: amke sure not to duplicate 
     await pool.query(`
         INSERT INTO metadata.underlyingmetadata(idunderlying, cTokens)
-        VALUES($1, '{$2}');`,
+        VALUES($1, '{$2}')`,
         [id, cToken]
     );
 
