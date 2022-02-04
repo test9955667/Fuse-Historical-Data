@@ -136,18 +136,16 @@ export async function getBlockLastUpdated(network: number) {
     }
 }
 
-async function test() {
-  
-}
-test();
+
 // sets the last synced block for a given network
+// --DONE
 export async function setBlockLastUpdated(network: number, block: BigInt) {
     try {
-        await pool.query(
-            `UPDATE metadata.networkmetadata
-             SET block_last_updated = $1
-             WHERE network = $2;`,
-             [block, network]
+        await pool.query(`
+            UPDATE metadata.networkmetadata
+            SET block_last_updated = $1
+            WHERE network = $2;`,
+            [block, network]
         );
     } catch (err) {
         throw new Error("error updating last block for " + network);
@@ -155,69 +153,74 @@ export async function setBlockLastUpdated(network: number, block: BigInt) {
 }
 
 // gets underlying token corresponding to cToken
+// --DONE
 export async function getUnderlyingOfCToken(network: number, cToken: string) { 
-    let res = await pool.query(
-        `SELECT underlying FROM 
+    let res = await pool.query(`
+        SELECT underlying FROM 
         metadata.ctokenmetadata
-        WHERE token = $1+$2;`,
-        [network, cToken]
+        WHERE token = $1;`,
+        [network+cToken]
     );
-    return res;
+    return res.rows[0].underlying;
+}
+
+// gets the list of cTokens for underlying
+// --DONE
+export async function getCTokensOfUnderlying(network: number, underlying: string) {
+    let str = `SELECT cTokens FROM metadata.underlyingmetadata WHERE idunderlying = $1`
+    let query = await pool.query(str, [network+underlying]);
+    return query.rows[0].ctokens;
 }
 
 
 // sets another cToken corresponding to underlying
+// --DONE
 export async function addCTokenToUnderlying(network: number, underlying: string, cToken: string) {
-    let id = network+underlying;
-    // TODO: amke sure not to duplicate 
-    await pool.query(`
-        INSERT INTO metadata.underlyingmetadata(idunderlying, cTokens)
-        VALUES($1, '{$2}')`,
-        [id, cToken]
-    );
+    let make = `
+    INSERT INTO metadata.underlyingmetadata (idunderlying) VALUES($1)
+    ON CONFLICT(idunderlying) DO NOTHING;`;
+    await pool.query(make, [network+underlying]);
+
+    let str = `
+    UPDATE metadata.underlyingmetadata 
+    SET ctokens = array_append(ctokens ,$2)
+    WHERE idunderlying = $1;`;
+
+    await pool.query(str ,[network+underlying, cToken]);
 
 }
-
+// 
+// --DONE
 export async function addUnderlyingToCToken(network: number, cToken: string, underlying: string) {
-    let id = network+cToken;
-    await pool.query(`
-        INSERT INTO metadata.ctokenmetadata(token, underlying)
-        VALUES($1, $2);`,
-    [id, underlying]);
+    let str = `
+    INSERT INTO metadata.ctokenmetadata(token, underlying) VALUES($1, $2)
+    ON CONFLICT(token) DO NOTHING;`
+    await pool.query(str, [network+cToken, underlying]);
 }
 
 
-// gets the list of cTokens for underlying
-export async function getCTokensOfUnderlying(network: number, underlying: string) {
-    let id = network+underlying;
-    let query = await pool.query(`
-        SELECT cTokens FROM metadata.underlyingmetadata
-        WHERE idunderlying = $1`,
-        [id]
-    );
-    return query.rows[0].cTokens;
-}
+
 
 // TODO: reset latest block for all networks
-export async function clearLastRow(chain: number, token: string) {
+export async function clearRow(chain: number, token: string, timestamp: number) {
     let id = chain+token;
-    let queryTime = await pool.query(`
-        SELECT datetime FROM token_info.`+id+`
-        ORDER BY datetime DESC LIMIT 1;`); // TODO: test
-    let time = queryTime.rows[0].datetime;
-    let query = await pool.query(`
-        DELETE FROM token_info.`+id+`
-        WHERE datetime = $1;`,
-        [time]
-        );
+ 
+    let str = `DELETE FROM token_info.`+id+` WHERE datetime = $1;`;
+    let query = await pool.query(str, [timestamp]);
     console.log(query);
 }
 
-async function testdelete() {
-    // TODO: test 
-// console.log(clearTokenAtRow(1, "", ))
+async function test() {
+   let under = "underlying";
+   let network = 1;
+
+    let res = await getUnderlyingOfCToken(network, "cToken");
+    pool.end();
+    console.log(res.rows[0].underlying);
 
 }
+
+test();
 
 
 

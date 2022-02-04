@@ -91,6 +91,8 @@ async function sync(chain: number, exactTime: boolean) { //TODO; add chain spec 
     let blockList = mem.poolsBlockList;
     // current block number
     let endBlock  = await mem.web3.eth.getBlockNumber();
+    // Sets block last updated in db in case sync stops early
+    await db.setBlockLastUpdated(chain, BigInt(currBlock));
 // ============ GET HISTORIC LIQUIDITY ========== //
     while(currBlock < endBlock) {
         if(!exactTime) { currBlock += mem.BLOCKS; } 
@@ -143,8 +145,6 @@ async function sync(chain: number, exactTime: boolean) { //TODO; add chain spec 
             }
            
         }
-        // Sets block last updated in db in case sync stops early
-        await db.setBlockLastUpdated(chain, BigInt(currBlock));
         // endBlock always current block until sync is caught up, then sync ends
         endBlock = await mem.web3.eth.getBlockNumber();
     }
@@ -256,7 +256,7 @@ async function clearUnderlying(time: number, blockInterval: number, mem: network
     for(let i = 0; i < mem.poolsBlockList.length; i++) {
             let pAddr = mem.poolBlockMap.get(mem.poolsBlockList[i]);
             if (pAddr == null) continue; // compiler safety, not possible
-            await db.clearLastRow(mem.CHAIN, pAddr);
+            await db.clearRow(mem.CHAIN, pAddr, timestamp);
     }  
 
 }
