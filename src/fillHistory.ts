@@ -48,10 +48,8 @@ async function entry(networks: network[], exactTime: boolean) {
         let web3 = new Web3(new Web3.providers.HttpProvider(ntwk.getUrl(chain)));
         networkNames.push(chain);
         let network = new networkMemory(chain, genesis, blocks, dirInfo, lensInfo, comptrollerInfo, cTokenInfo, lastUpdated, web3);
+        network.poolsBlockList = await getAllPools(network); // TODO: test
         networkMap.set(chain, network);
-
-        console.log(chain);
-        getOrSetUnderlying(chain, lensInfo.addr);
         return;
         await sync(chain, exactTime);
     }
@@ -75,16 +73,7 @@ async function sync(chain: number, exactTime: boolean) { //TODO; add chain spec 
     let lens    = mem.lens;
 
 // ===== ORDER POOLS BY BLOCK DEPLOYED ====== //
-    let pools = await mem.directory.methods.getPublicPools().call();
-    let poolsBlockList: number[] = []; 
-    let poolBlockMap = new Map();; // key: blockDeployed, value: comptrollerAddress
-    for(let i = 0; i < pools[1].length; i++) {
-            poolBlockMap.set(pools[1][i].blockPosted, pools[1][i].comptroller); 
-            poolsBlockList.push(pools[1][i].blockPosted);
-    }
-    mem.poolBlockMap = poolBlockMap;
-    poolsBlockList.sort();
-
+    let poolsBlockList = await getAllPools(mem);
 
 // ======== LOAD POOLS/TOKENS EFFICIENTLY ========= // 
     let poolContractMap = mem.poolContractMap; // key: cTokenAddress, value cTokenInstance
@@ -108,7 +97,7 @@ async function sync(chain: number, exactTime: boolean) { //TODO; add chain spec 
             if(currTime < previous + 1800 ) { continue; } 
             previous += 1800; 
         } 
-        while(currBlock >= poolsBlockList[poolCount]) { poolCount++; }
+        while(currBlock > poolsBlockList[poolCount]) { poolCount++; }
         let timestamp = (await mem.web3.eth.getBlock(currBlock)).timestamp;
         lens.defaultBlock = currBlock;
 
@@ -150,6 +139,16 @@ async function sync(chain: number, exactTime: boolean) { //TODO; add chain spec 
                         new mem.web3.eth.Contract(mem.TOK_ABI,cAddr)
                     );
                     token = cTokenMap.get(cAddr);
+                    
+                    // 1 get underlying 
+                    let underling = await token?.methods.underlying().call();
+                    // 2 add it and underlying to memory
+                    underlyingMap.set(cAddr, underling);
+                    // 3 add it ctoken of underling database 
+                    // await db.addCTokenToUnderlying(underling, cAddr);
+                    // 4 add it and underlying to database 
+                    // await db.addUnderlyingToCToken(cAddr, underling);
+
                     mem.cTokenMap = cTokenMap;
                     // let events = await token.getPastEvents(); events branch
                     // cTokenEvents.set(cAddr, events);
@@ -191,8 +190,18 @@ async function sync(chain: number, exactTime: boolean) { //TODO; add chain spec 
     
 }
 
-async function getAllPools() {
-    // take pool logic out of sync and place it here 
+async function getAllPools(mem: networkMemory) {
+    console.log("HERE");
+    let pools = await mem.directory.methods.getPublicPools().call();
+    let poolsBlockList: number[] = []; 
+    let poolBlockMap = new Map();; // key: blockDeployed, value: comptrollerAddress
+    for(let i = 0; i < pools[1].length; i++) {
+            poolBlockMap.set(pools[1][i].blockPosted, pools[1][i].comptroller); 
+            poolsBlockList.push(pools[1][i].blockPosted);
+    }
+    mem.poolBlockMap = poolBlockMap;
+    poolsBlockList.sort();
+    return poolsBlockList;
 }
 
 async function getPoolTokenInfo(block: number) {
@@ -244,6 +253,27 @@ async function getOrSetUnderlying(chain: number, cAddr: string) {
     }
     */
  
+}
+
+// clears most recent underlying updates to prevent duplicate data
+// gets last updated then adds mem.block (interval) to it 
+async function clearUnderlying(chain: number, blockInterval: number, mem: networkMemory) {
+    let block = await db.getBlockLastUpdated(chain) + blockInterval;
+    let timestamp = (await mem.web3.eth.getBlock(block)).timestamp;
+    let i;
+    for(i = 0; i < mem.poolsBlockList.length; i++) {
+        while(mem.poolsBlockList[i] >= block) {
+            let pAddr = mem.poolBlockMap.get(mem.poolsBlockList[i]);
+            if (pAddr == null) continue; // compiler safety, not possible
+            await db.clearTokenAtRow(chain, pAddr, timestamp);
+            // TODO: finish implementation 
+            i++;
+        }
+        
+    }
+
+
+    
 }
 
 

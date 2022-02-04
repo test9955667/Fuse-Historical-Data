@@ -1,5 +1,6 @@
 const express = require("express");
 const Pool = require("pg").Pool;
+import { clear } from "console";
 import {env} from "../ecosystem.config";
 const app = express();
 
@@ -169,8 +170,8 @@ export async function getUnderlyingOfCToken(network: number, cToken: string) {
 export async function addCTokenToUnderlying(network: number, underlying: string, cToken: string) {
     let id = network+underlying;
 
-    await pool.query(
-        `INSERT INTO metadata.underlyingmetadata(idunderlying, cTokens)
+    await pool.query(`
+        INSERT INTO metadata.underlyingmetadata(idunderlying, cTokens)
         VALUES($1, '{$2}');`,
         [id, cToken]
     );
@@ -189,8 +190,8 @@ export async function addUnderlyingToCToken(network: number, cToken: string, und
 // gets the list of cTokens for underlying
 export async function getCTokensOfUnderlying(network: number, underlying: string) {
     let id = network+underlying;
-    let query = await pool.query(
-        `SELECT cTokens FROM metadata.underlyingmetadata
+    let query = await pool.query(`
+        SELECT cTokens FROM metadata.underlyingmetadata
         WHERE idunderlying = $1`,
         [id]
     );
@@ -198,9 +199,22 @@ export async function getCTokensOfUnderlying(network: number, underlying: string
 }
 
 // TODO: reset latest block for all networks
-async function resetTimeline() {
- 
+export async function clearTokenAtRow(chain: number, token: string, timestamp: string | number) {
+    let id = chain+token;
+    let query = await pool.query(`
+        DELETE FROM token_info.`+id+`
+        WHERE datetime = $2;`
+        );
+    console.log(query);
 }
+
+async function testdelete() {
+    // TODO: test 
+// console.log(clearTokenAtRow(1, "", ))
+
+}
+
+
 
 
 // total liqudiity 

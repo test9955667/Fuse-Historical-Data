@@ -1,11 +1,6 @@
 {
-<<<<<<< Updated upstream
-    "ethMain": {
-        "rpcUrl": "https://eth-mainnet.alchemyapi.io/v2/2Mt-6brbJvTA4w9cpiDtnbTo6qOoySnN",
-=======
     "1": {
         "rpcUrl": "https://eth-mainnet.alchemyapi.io/v2/LJVLCa0Ry_071ika2ECrnuP2Idk1Z7kS",
->>>>>>> Stashed changes
 
         "lensAbi": "ethMain/LensABI.json",
         "lensAddress": "0x6Dc585Ad66A10214Ef0502492B0CC02F0e836eec",

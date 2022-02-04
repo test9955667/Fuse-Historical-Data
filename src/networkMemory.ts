@@ -25,6 +25,8 @@ export class networkMemory {
     lastUpdated: number;
     web3: Web3;
 
+    poolsBlockList: number[] = [];
+
     // MAPPINGS
     poolContractMap: Map<string, Contract>; // key: cTokenAddress, value cTokenInstance
     poolBlockMap: Map<number, string>; // key: blockNumber, value: cTokenAddress
