@@ -7,77 +7,65 @@ type contractInfo = {
     addr: string
 }
 
-// used to easily access and pass pointers to convenience structures in memeory
+// used to read / write memory easily without redundant object initialization and chain/db searching
 export class networkMemory {
 
-    // CONSTANTS 
-    readonly CHAIN: number;
-    readonly GENESIS: number;
-    readonly BLOCKS: number;
-    readonly POOL_ABI: AbiItem[];
-    readonly TOK_ABI: AbiItem[];
-    
-    // CONTRACTS
-    directory: Contract;
-    lens:      Contract;
-
-    // MISC.
-    lastUpdated: number;
-    web3: Web3;
-
+    // UNINITIALIZED DECS
     poolsBlockList: number[] = [];
 
-    // MAPPINGS
-    poolContractMap: Map<string, Contract>; // key: cTokenAddress, value cTokenInstance
-    poolBlockMap: Map<number, string>; // key: blockNumber, value: cTokenAddress
-    cTokenMap: Map<string, Contract>;
-    underlyingMap: Map<string, string>; // key: cTokenAddress, value: underlyingAddress
-    //cTokenEvents = new Map(); // events branch
-    
-    constructor(
-        chain: number,
-        geneis: number,
-        blocks: number,
-        dirInfo: contractInfo,
-        lensInfo: contractInfo,
-        cmpABI: AbiItem[],
-        tokABI: AbiItem[],
-        lastUpdated: number,
-        web3: Web3,
-        ) {
-        // CONSTANT DECLARATIONS
-        this.CHAIN = chain;
-        this.GENESIS = geneis;
-        this.BLOCKS = blocks;
-        this.POOL_ABI = cmpABI;
-        this.TOK_ABI = tokABI;
-        
+    // CONSTANT DECS 
+    readonly CHAIN:    number;
+    readonly BLOCKS:   number;
+    readonly GENESIS:  number;
+    readonly TOK_ABI:  AbiItem[];
+    readonly POOL_ABI: AbiItem[];
 
+    // CONTRACT DECS
+    lens:      Contract;
+    directory: Contract;
+
+    // MISC. DECS
+    web3:        Web3;
+    lastUpdated: number;
+
+    // MAPPING DECS
+    cTokenMap:       Map<string, Contract>; // key: cTokenAddress, value: cToken contract instance
+    poolBlockMap:    Map<number, string>;   // key: blockNumber, value: cTokenAddress
+    underlyingMap:   Map<string, string>;   // key: cTokenAddress, value: underlyingAddress
+    poolContractMap: Map<string, Contract>; // key: poolAddress, value pool contract instance
+    //cTokenEvents:  Map<>; // events branch
+
+    constructor(
+        web3:        Web3,
+        chain:       number,
+        geneis:      number,
+        blocks:      number,
+        cmpABI:      AbiItem[],
+        tokABI:      AbiItem[],
+        dirInfo:     contractInfo,
+        lensInfo:    contractInfo,
+        lastUpdated: number,
+
+        ) {
+        // CONSTANT INIT
+        this.CHAIN    = chain;
+        this.BLOCKS   = blocks;
+        this.GENESIS  = geneis;
+        this.TOK_ABI  = tokABI;
+        this.POOL_ABI = cmpABI;
+        
+        // CONTRACT INIT
+        this.lens      = new web3.eth.Contract(lensInfo.abi, lensInfo.addr);
+        this.directory = new web3.eth.Contract(dirInfo.abi, dirInfo.addr);
+
+        // MISC     INIT
+        this.web3        = web3;
         this.lastUpdated = lastUpdated;
 
-        // CONTRACT DECLARATIONS
-        this.directory = new web3.eth.Contract(dirInfo.abi, dirInfo.addr);
-        this.lens = new web3.eth.Contract(lensInfo.abi, lensInfo.addr);
-        this.web3 = web3;
-
-        // MAPPING DECLARATIONS
+        // MAPPING  INIT
+        this.cTokenMap       = new Map();
+        this.poolBlockMap    = new Map();
+        this.underlyingMap   = new Map();
         this.poolContractMap = new Map();
-        this.poolBlockMap = new Map();
-        this.cTokenMap = new Map();
-        this.underlyingMap = new Map();
-
     }
-
-    setPool(addr: string){
-        this.poolContractMap.set(addr, new this.web3.eth.Contract(this.POOL_ABI, addr));
-    }
-
-    setCToken(addr: string) {
-        this.cTokenMap.set(addr, new this.web3.eth.Contract(this.TOK_ABI, addr));
-    }
-
-    setUnderlying(addr: string, underlying: string) {
-        this.underlyingMap.set(addr, underlying);
-    }
-
 }
