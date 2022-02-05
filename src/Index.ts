@@ -209,7 +209,7 @@ export async function addUnderlyingToCToken(network: number, cToken: string, und
 
 
 // --DONE
-export async function clearRow(chain: number, token: string, timestamp: number) {
+export async function clearRow(chain: number, token: string, timestamp: number | string) {
     let id = chain+token;
 
     let str = `
@@ -232,18 +232,6 @@ export async function clearRow(chain: number, token: string, timestamp: number) 
     res = await pool.query(str, [timestamp]);
 
 }
-
-async function test() {
-   let under = "tok1";
-   let network = 1;
-
-    let res = await getBlockLastUpdated(network);
-    console.log(res);
-
-}
-
-test();
-
 
 
 
