@@ -1,6 +1,6 @@
 const express = require("express");
 const Pool = require("pg").Pool;
-import { clear } from "console";
+import { clear, time } from "console";
 import {env} from "../ecosystem.config";
 const app = express();
 
@@ -17,7 +17,7 @@ const pool = new Pool({
 ///////// ENDPOINT FUNCTIONS //////////
 
 /**
- * 
+ * // TODO: debug with sharad 
  * @param chain chainID to search token data for
  * @param token token address to query 
  * @param start beginning of time range to query UNIX | timestamp, LEAVE 0 for all time
@@ -65,13 +65,13 @@ async function getRangeSingle(
 
 // adds token data to token
 export async function addCTokenData(
-    chain: number, 
-    address: string, 
-    datetime: string | number, 
+    chain:       number, 
+    address:     string, 
+    datetime:    string | number, 
     totalSupply: BigInt,
     totalBorrow: BigInt,
-    liquidity: BigInt,
-    isCToken: boolean
+    liquidity:   BigInt,
+    isCToken:    boolean
     ) {
         // 1) check if token exists 
         // 2) if not create table 
@@ -82,12 +82,22 @@ export async function addCTokenData(
     await addTable(id);
     try {
         let append = `DO NOTHING`;
-        if(!isCToken) { append = ``;} // TODO: ADD values for underlying
-        let quer = `INSERT 
-                        token_info.`+id+`(datetime, totalsupply, totalborrow, liquidity)
+
+        if(!isCToken) { 
+            append = `
+            DO UPDATE SET (
+                totalsupply = '`+id+`'.totalsupply + EXCLUDED.totalsupply, 
+                totalborrow = '`+id+`'.totalborrow + EXCLUDED.totalborrow, 
+                liquidity   = '`+id+`'.liquidity   + EXCLUDED.liquidity
+            )`;
+        } // TODO: ADD values for underlying
+
+
+        let quer = `INSERT INTO
+                        token_info.'`+id+`'(datetime, totalsupply, totalborrow, liquidity)
                         VALUES($1,$2,$3,$4)
-                        ON CONFLICT(datetime) DO NOTHING
-                        ;`
+                        ON CONFLICT(datetime) `+append+`
+                    ;`
 
         let response = await pool.query(
             quer,
@@ -102,13 +112,15 @@ export async function addCTokenData(
 
 
 // sets new table for token data
+// --DONE
 async function addTable(id: string) {
     try{
         let query = `CREATE TABLE IF NOT EXISTS
-        token_info.`+id+` (
-            datetime TIMESTAMP NOT NULL,
+        token_info.'`+id+`' (
+            datetime    TIMESTAMP PRIMARY KEY,
             totalsupply BIGINT,
-            totalborrow BIGINT
+            totalborrow BIGINT,
+            liquidity   BIGINT,
             );`; // TODO: change token_info to token_info for prod
         let result = await pool.query(query);  
        } catch (err) {
@@ -119,18 +131,15 @@ async function addTable(id: string) {
 
 
 // gets the last synced block for a given network
+// --DONE 
 export async function getBlockLastUpdated(network: number) {
     try{
-        let networkInfo = await pool.query(
-            `SELECT * FROM metadata.networkmetadata`
-        );
-        for(let i = 0; i < networkInfo.rows.length; i++) {
-            if(networkInfo.rows[i].network == network) {
-                return networkInfo.rows[i];
-            } 
-        }
-        throw new Error("network not found");
-
+        let str = `
+        SELECT block_last_updated 
+        FROM metadata.networkmetadata
+        WHERE network = $1;`;
+        let networkInfo = await pool.query(str, [network]);
+        return networkInfo.rows[0].block_last_updated;
     } catch (err) {
         throw new Error("error retreiving last updated block");
     }
@@ -199,24 +208,37 @@ export async function addUnderlyingToCToken(network: number, cToken: string, und
 }
 
 
-
-
-// TODO: reset latest block for all networks
+// --DONE
 export async function clearRow(chain: number, token: string, timestamp: number) {
     let id = chain+token;
- 
-    let str = `DELETE FROM token_info.`+id+` WHERE datetime = $1;`;
-    let query = await pool.query(str, [timestamp]);
-    console.log(query);
+
+    let str = `
+        SELECT EXISTS (
+        SELECT FROM pg_tables
+        WHERE tablename = '`+id+`'
+        );`;
+    let res = await pool.query(str);
+    if(!res.rows[0].exists) return;
+        
+    str = `
+    SELECT EXISTS (
+    SELECT * FROM token_info."`+id+`"
+    WHERE datetime = '`+timestamp+`'
+    );`;
+    res = await pool.query(str);
+    if(!res.rows[0].exists) return;
+    
+    str = `DELETE FROM token_info."`+id+`" WHERE datetime = $1;`;
+    res = await pool.query(str, [timestamp]);
+
 }
 
 async function test() {
-   let under = "underlying";
+   let under = "tok1";
    let network = 1;
 
-    let res = await getUnderlyingOfCToken(network, "cToken");
-    pool.end();
-    console.log(res.rows[0].underlying);
+    let res = await getBlockLastUpdated(network);
+    console.log(res);
 
 }
 

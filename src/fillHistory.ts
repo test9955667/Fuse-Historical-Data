@@ -67,8 +67,10 @@ async function entry(networks: network[], exactTime: boolean) {
         // Set network instance in memory 
         networkMap.set(chain, network);
         networkNames.push(chain);
-
-        return;
+        
+        // Clears latest 
+        await clearUnderlying(network, exactTime);
+    
         await sync(chain, exactTime);
     }
 
@@ -85,14 +87,14 @@ async function sync(chain: number, exactTime: boolean) { //TODO; add chain spec 
 
 // =============  INITIAL TIME VALUES =========== //  
     let poolCount = 0;
-    let previous  = Number((await mem.web3.eth.getBlock(mem.GENESIS)).timestamp);
+    let previous  = Number((await mem.web3.eth.getBlock(mem.lastUpdated)).timestamp);
     // start network sync from last updated block
     let currBlock = mem.lastUpdated;
     let blockList = mem.poolsBlockList;
     // current block number
     let endBlock  = await mem.web3.eth.getBlockNumber();
     // Sets block last updated in db in case sync stops early
-    await db.setBlockLastUpdated(chain, BigInt(currBlock));
+    
 // ============ GET HISTORIC LIQUIDITY ========== //
     while(currBlock < endBlock) {
         if(!exactTime) { currBlock += mem.BLOCKS; } 
@@ -106,6 +108,8 @@ async function sync(chain: number, exactTime: boolean) { //TODO; add chain spec 
         let timestamp = (await mem.web3.eth.getBlock(currBlock)).timestamp;
         mem.lens.defaultBlock = currBlock;
 
+        mem.lastUpdated = currBlock;
+        await db.setBlockLastUpdated(chain, BigInt(currBlock));
         /*///////////////////////////////////////////////////
         Iterates through pool to write data foreach cToken
         /////////////////////////////////////////////////*/
@@ -155,8 +159,6 @@ async function sync(chain: number, exactTime: boolean) { //TODO; add chain spec 
            HELPER / LOGIC FUNCTIONS
     //////////////////////////////////*/
 
-// @notice gets all pool addresses for a network, 
-// then orders them by block deployed in memory
 /**
  * @notice gets all pool addresses for a network, 
  * then orders them by block deployed in memory
@@ -245,18 +247,21 @@ async function getAndSetPool(pAddr: string, mem: networkMemory) {
 
 /**
  * @notice clears most recent underlying updates to prevent duplicate data
- * @param chain 
- * @param blockInterval 
- * @param mem 
+ * @param  chain 
+ * @param  blockInterval 
+ * @param  mem 
  */
-async function clearUnderlying(time: number, blockInterval: number, mem: networkMemory, exact: boolean) {
+async function clearUnderlying(mem: networkMemory, exact: boolean) {
     let lastBlock = await db.getBlockLastUpdated(mem.CHAIN);
     let timestamp = (await mem.web3.eth.getBlock(lastBlock)).timestamp;
+    timestamp = typeof timestamp == "number" ? timestamp : parseInt(timestamp);
 
     for(let i = 0; i < mem.poolsBlockList.length; i++) {
             let pAddr = mem.poolBlockMap.get(mem.poolsBlockList[i]);
             if (pAddr == null) continue; // compiler safety, not possible
-            await db.clearRow(mem.CHAIN, pAddr, timestamp);
+
+            try{ await db.clearRow(mem.CHAIN, pAddr, timestamp); // TODO: test catch
+            } catch(e) { continue; }
     }  
 
 }
