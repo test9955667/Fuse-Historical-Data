@@ -15,15 +15,15 @@ type network = { network: keyof typeof CHAINID }
 type contractInfo = { abi: AbiItem[], addr: string }
 
 type memory = {
-    web3:        Web3,
-    chain:       number,
-    blocks:      number,
-    tokAbi:      AbiItem[],
-    cmpAbi:      AbiItem[],
-    genesis:     number,
-    dirInfo:     contractInfo,
-    lensInfo:    contractInfo,
-    lastUpdated: number,
+    web3:          Web3,
+    chain:         number,
+    blocks:        number,
+    tokAbi:        AbiItem[],
+    cmpAbi:        AbiItem[],
+    genesis:       number,
+    dirInfo:       contractInfo,
+    lensInfo:      contractInfo,
+    lastUpdated:   number,
     underlyingMap: Map<string, string>,
 }
 
