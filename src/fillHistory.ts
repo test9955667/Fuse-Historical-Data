@@ -6,6 +6,7 @@ import * as ntwk from "./ChainParse";
 import { CHAINID, networks } from "../assets/Networks"
 
 import * as db from './Index';
+import { pool } from "./dbOperations/db";
 
 
 // ===========  TYPES  =========== // 
@@ -75,14 +76,15 @@ async function sync(chain: number, exactTime: boolean) {
 
     let { poolBlockList, poolBlockMap} = await getAllPools(mem);
     await clearUnderlying(mem, exactTime, poolBlockList, poolBlockMap);
+    if(poolBlockList[0] == undefined) {return;}
 // =============  INITIAL TIME VALUES =========== //  
     let poolCount = 0;
     let previous  = Number((await mem.web3.eth.getBlock(mem.lastUpdated)).timestamp);
     
     // @notice prepares query time intervals in blocks
     // Exhibit A why javascript is so bad
-    let currBlock = parseInt(mem.lastUpdated.toString());
-    let increment = parseInt(mem.blocks.toString());
+    let currBlock = mem.lastUpdated;
+    let increment = mem.blocks;
     let endBlock  = await mem.web3.eth.getBlockNumber();
 
  
@@ -90,7 +92,7 @@ async function sync(chain: number, exactTime: boolean) {
     while(currBlock < endBlock) {
         // 30 min interval logic
         if(!exactTime) { 
-            currBlock + increment; 
+            currBlock = Number(currBlock) + Number(increment); 
         } else {
             let currTime = (await mem.web3.eth.getBlock(currBlock)).timestamp;
             currBlock++;
@@ -99,16 +101,19 @@ async function sync(chain: number, exactTime: boolean) {
         } 
 
         while(currBlock > poolBlockList[poolCount]) { poolCount++; }
-
+        console.log(poolBlockList.length);
+        if(5*5 == 25) {return;}
         let blockInfo = await mem.web3.eth.getBlock(currBlock);
         let timestamp = blockInfo.timestamp;
-        
+        console.log(currBlock);
         //mem.lens.defaultBlock = currBlock;
-
         mem.lastUpdated = currBlock;
-        await db.setBlockLastUpdated(chain, BigInt(currBlock));
+        // await db.setBlockLastUpdated(chain, BigInt(currBlock));
        
         for(let j = 0; j < poolCount; j++) {
+            console.log(poolCount);
+            if(5*5 == 25) {return;}
+
             // gets and or sets pool instance 
             let pAddr = poolBlockMap.get(poolBlockList[j]);
             if(pAddr == undefined) { continue; } 
@@ -150,7 +155,7 @@ async function sync(chain: number, exactTime: boolean) {
            HELPER / LOGIC FUNCTIONS
     //////////////////////////////////*/
 
-/**
+/** -- DONE
  * @notice gets all pool addresses for a network, 
  * then orders them by block deployed in memory
  * @param mem netowrk memory instance to read / write 
@@ -167,9 +172,9 @@ async function getAllPools(mem: memory) {
     let poolBlockList: number[] = []; 
     let poolBlockMap:  Map<number, string> = new Map();; // key: blockDeployed, value: comptrollerAddress
 
-    for(let i = 0; i < pools[1].length; i++) {
-            poolBlockMap.set(pools[1][i].blockPosted, pools[1][i].comptroller); 
-            poolBlockList.push(pools[1][i].blockPosted);
+    for(let i = 0; i < pools.length; i++) {
+            poolBlockMap.set(pools[i].blockPosted, pools[i].comptroller); 
+            poolBlockList.push(pools[i].blockPosted);
     }
 
     poolBlockList.sort();
