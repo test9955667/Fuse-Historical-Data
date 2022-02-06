@@ -116,7 +116,7 @@ export async function addCTokenData(
 async function addTable(id: string) {
     try{
         let query = `CREATE TABLE IF NOT EXISTS
-        token_info.'`+id+`' (
+        token_info.`+id+` (
             datetime    TIMESTAMP PRIMARY KEY,
             totalsupply BIGINT,
             totalborrow BIGINT,
@@ -170,7 +170,7 @@ export async function getUnderlyingOfCToken(network: number, cToken: string) {
         WHERE token = $1;`,
         [network+cToken]
     );
-    return res.rows[0].underlying;
+    return res;
 }
 
 // gets the list of cTokens for underlying
@@ -178,7 +178,7 @@ export async function getUnderlyingOfCToken(network: number, cToken: string) {
 export async function getCTokensOfUnderlying(network: number, underlying: string) {
     let str = `SELECT cTokens FROM metadata.underlyingmetadata WHERE idunderlying = $1`
     let query = await pool.query(str, [network+underlying]);
-    return query.rows[0].ctokens;
+    return query;
 }
 
 
