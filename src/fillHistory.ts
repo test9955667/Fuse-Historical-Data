@@ -77,8 +77,11 @@ async function sync(chain: number, exactTime: boolean) {
     if(mem == undefined) {return}
 
     let { poolBlockList, poolBlockMap} = await getAllPools(mem);
-    await clearUnderlying(mem, exactTime, poolBlockList, poolBlockMap);
     if(poolBlockList[0] == undefined) {return;}
+
+    let unders = await getAllUnderlying(mem, poolBlockList, poolBlockMap);
+    await clearUnderlying(mem, unders, exactTime);
+
 // =============  INITIAL TIME VALUES =========== //  
     let poolCount = 0;
     let previous  = Number((await mem.web3.eth.getBlock(mem.lastUpdated)).timestamp);
@@ -223,16 +226,34 @@ async function getAndSetUnderlying(chain: number, cAddr: string, mem: memory, cT
 
 
 
-async function clearUnderlying(mem: memory, exact: boolean, poolsBlockList: number[], poolBlockMap: Map<number, string>) {
+async function clearUnderlying(mem: memory, under: string[], exact: boolean) {
     // TODO: get last updated block, then clear any entries later than it!!!
+    // for each pool, get all cTokens, then get underlying for each cToken
     let lastBlock = await db.getBlockLastUpdated(mem.chain);
     let timestamp = (await mem.web3.eth.getBlock(lastBlock)).timestamp;
 
+    for(let i = 0; i < under.length; i++) {
+        db.clearRow(mem.chain, under[i].toLowerCase(), timestamp);
+    }
+}
+
+async function getAllUnderlying(mem: memory, poolsBlockList: number[], poolBlockMap: Map<number, string>) {
+    let under: string[] = [];
     for(let i = 0; i < poolsBlockList.length; i++) {
         let pAddr = poolBlockMap.get(poolsBlockList[i]);
-        if (pAddr == null) continue; // compiler safety, not possible
-        await db.clearRow(mem.chain, pAddr, timestamp); // TODO: test catch
-    }  
+        if(pAddr == undefined) continue;
+        let pool = contract(pAddr, mem.cmpAbi, mem.web3);
+        let cTokens = await pool.methods.getAllMarkets().call();
+        for(let j = 0; j < cTokens.length; j++) {
+            let cAddr = cTokens[j];
+            let token = contract(cAddr, mem.tokAbi, mem.web3);
+            let under = await token.methods.underlying().call();
+            if(under == undefined) { continue; }
+            mem.underlyingMap.set(cAddr, under);
+            under.push(under);
+        }
+    }
+    return under;
 }
 
 

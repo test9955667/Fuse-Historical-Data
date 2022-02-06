@@ -211,7 +211,6 @@ export async function addUnderlyingToCToken(network: number, cToken: string, und
 // --DONE
 export async function clearRow(chain: number, token: string, timestamp: number | string) {
     let id = chain+token;
-
     let str = `
         SELECT EXISTS (
         SELECT FROM pg_tables
@@ -227,8 +226,8 @@ export async function clearRow(chain: number, token: string, timestamp: number |
     );`;
     res = await pool.query(str);
     if(!res.rows[0].exists) return;
-    
-    str = `DELETE FROM token_info."`+id+`" WHERE datetime = $1;`;
+    // TODO: delete the next row 
+    str = `DELETE FROM token_info."`+id+`" WHERE datetime > $1;`; // TDOO: test
     res = await pool.query(str, [timestamp]);
 
 }
