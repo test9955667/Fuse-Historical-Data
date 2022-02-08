@@ -7,6 +7,7 @@ import { CHAINID, networks } from "../assets/Networks"
 
 import * as db from './Index';
 import { pool } from "./dbOperations/db";
+import { NumberDataType } from "sequelize/dist";
 
 
 // ===========  TYPES  =========== // 
@@ -55,7 +56,7 @@ async function entry(networks: network[], exactTime: boolean) {
         lensInfo      : ntwk.getLensInfo(chain),
         lastUpdated   : await db.getBlockLastUpdated(chain),
         underlyingMap : new Map(), 
-        cTokensOfPool : new Map()
+        cTokensOfPool : new Map(),
         }
 
         // Set network instance in memory 
@@ -76,11 +77,13 @@ async function sync(chain: number, exactTime: boolean) {
     let mem  = networkMap.get(chain);
     if(mem == undefined) {return}
 
-    let { poolBlockList, poolBlockMap} = await getAllPools(mem);
+    let { poolBlockList, poolBlockMap } = await getAllPools(mem);
     if(poolBlockList[0] == undefined) {return;}
 
     let unders = await getAllUnderlying(mem, poolBlockList, poolBlockMap);
+    
     await clearUnderlying(mem, unders, exactTime);
+    // if(5*5 == 25) {return;}
 
 // =============  INITIAL TIME VALUES =========== //  
     let poolCount = 0;
@@ -112,9 +115,10 @@ async function sync(chain: number, exactTime: boolean) {
         let timestamp = blockInfo.timestamp;
 
         
-        
+        console.log(timestamp);
        
         for(let j = 0; j < poolCount; j++) {
+
             // gets and or sets pool instance 
             let pAddr = poolBlockMap.get(poolBlockList[j]);
             if(pAddr == undefined) { continue; } 
@@ -134,7 +138,7 @@ async function sync(chain: number, exactTime: boolean) {
 
                 // gets and or sets ctoken instance and underlying address
                 let token = contract(cAddr, mem.tokAbi, mem.web3);
-                let under = await getAndSetUnderlying(chain, cAddr, mem, token);
+                let under = await getAndSetUnderlying(cAddr, mem, token);
                 if(under == undefined) { continue; }
                 
                 // get block-specific data for cToken 
@@ -143,26 +147,24 @@ async function sync(chain: number, exactTime: boolean) {
                 let supply = await token.methods.totalSupply().call();
                 let borrow = await token.methods.totalBorrows().call();
                 let liquid = await token.methods.getCash().call();
-
+    
                 // write data to cToken
+                console.log(cAddr);
                 cAddr = cAddr.toLowerCase();
                 db.addCTokenData(chain, cAddr, timestamp, supply, borrow, liquid, true);
                 // write data to underyling 
                 db.addCTokenData(chain, under, timestamp, supply, borrow, liquid, false);
-
-                if(5*5 == 25) {return;}
-
-                } catch(e) {
-                    throw new Error(`${cAddr} failed to load`);
+                
+                } catch(e: any) {
+                    continue;
                 }
             }
-        }
-        // await db.setBlockLastUpdated(chain, BigInt(currBlock)); // TODO: uncomment when done testing
+        await db.setBlockLastUpdated(chain, BigInt(currBlock)); // TODO: uncomment when done testing
         // endBlock always current block until sync is caught up, then sync ends
-        endBlock = await mem.web3.eth.getBlockNumber();
+        endBlock = await mem.web3.eth.getBlockNumber(); 
+        }
     }
 }
-
 // 
 
     /*//////////////////////////////////
@@ -205,23 +207,25 @@ async function getAllPools(mem: memory) {
  * @param cToken  cToken contract instance to query underlying address
  * @returns under underlying address
  */
-async function getAndSetUnderlying(chain: number, cAddr: string, mem: memory, cToken: Contract) {
+async function getAndSetUnderlying(cAddr: string, mem: memory, cToken: Contract) {
     // Checks memory first, then db, then chain for underlying address
     let under = mem.underlyingMap.get(cAddr); 
     if(under == undefined) {
-        under = (await db.getUnderlyingOfCToken(mem.chain, cAddr)).rows[0]; 
+        under = (await db.getUnderlyingOfCToken(mem.chain, cAddr)).rows[0]?.underlying; 
         if(under == undefined) {
             under = await cToken.methods.underlying().call(); 
             if(under != undefined) { 
                 // add missing underlying to db and memory 
+                under = under.toLowerCase();
                 await db.addUnderlyingToCToken(mem.chain, cAddr, under)
                 .catch(e => {throw new Error(e)}); // TODO: test catch
                 mem.underlyingMap.set(cAddr, under);
                 // adds cToken to underlying metadata in db
-                await addCTokenToUnderlying(chain, under, cAddr);
+                await addCTokenToUnderlying(mem.chain, under, cAddr);
             } else throw new Error(`error fetching underling from ${cAddr}`);
         } 
-    } return under;
+    } 
+    return under;
 }
 
 
@@ -232,28 +236,35 @@ async function clearUnderlying(mem: memory, under: string[], exact: boolean) {
     let lastBlock = await db.getBlockLastUpdated(mem.chain);
     let timestamp = (await mem.web3.eth.getBlock(lastBlock)).timestamp;
 
-    for(let i = 0; i < under.length; i++) {
-        db.clearRow(mem.chain, under[i].toLowerCase(), timestamp);
+    for(let i = 0; i < 50; i++) {
+        await db.clearRow(mem.chain, under[i], timestamp);
+      
     }
 }
 
+type cTokenItem = {
+    token:     string;
+    underlying: string;
+    name: string;
+}
 async function getAllUnderlying(mem: memory, poolsBlockList: number[], poolBlockMap: Map<number, string>) {
-    let under: string[] = [];
-    for(let i = 0; i < poolsBlockList.length; i++) {
-        let pAddr = poolBlockMap.get(poolsBlockList[i]);
-        if(pAddr == undefined) continue;
-        let pool = contract(pAddr, mem.cmpAbi, mem.web3);
-        let cTokens = await pool.methods.getAllMarkets().call();
-        for(let j = 0; j < cTokens.length; j++) {
-            let cAddr = cTokens[j];
-            let token = contract(cAddr, mem.tokAbi, mem.web3);
-            let under = await token.methods.underlying().call();
-            if(under == undefined) { continue; }
-            mem.underlyingMap.set(cAddr, under);
-            under.push(under);
-        }
+    let tokens: cTokenItem[] = await db.getAllCTokens();
+    let len = mem.chain.toString().length;
+    let unders: string[] = [];
+
+    for(let i = 0; i < tokens.length; i++) {
+        let row = tokens[i];
+        if(row.token.length != Number(len)+Number(42)) continue;
+
+        let ntwk = row.token.slice(0, len);
+
+        if(Number(ntwk) == mem.chain) {
+            let addr = row.token.slice(-42);
+            unders.push(row.underlying);
+            mem.underlyingMap.set(addr, row.underlying);
+        }        
     }
-    return under;
+    return unders;
 }
 
 
@@ -281,3 +292,26 @@ async function syncEth() {
 
     // if
 }
+
+/**
+ * 
+ * token events idea 
+ * for all cTokens{ 
+ *  get all events till genesis
+ *  while last updated > events[i].timestamp {
+ *      pop events[i]
+ *  } 
+ *  cEvents.set(cAddr, events)
+ * 
+ * }
+ * for all blocks {
+ *  for all pools {
+ *      for all Ctokens {
+ *          while cEvents.get(cToken)[i].block < currBlock {
+ *              get that event types method and add to db=
+ *          }    
+ *      }
+ *  }
+ * 
+ * }
+ */
