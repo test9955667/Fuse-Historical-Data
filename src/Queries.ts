@@ -63,6 +63,85 @@ async function getRangeSingle(
 
 ////////// INTERNAL FUNCTIONS ///////////
 
+
+////////////// GETTERS /////////////////
+
+// 1) getBlockLast Updated
+// 2) getAllPools
+// 3) getCTokensFromPool
+// 4) getCTokensFromUnderlying 
+
+
+// gets the last synced block for a given network
+export async function getNetworkMetadata(chain: number) {
+    let str = `
+    SELECT * 
+    FROM metadata.networkmetadata
+    WHERE network = $1;`;
+    try{
+        return (await pool.query(str, [chain]).rows[0]);
+    } catch (err) {
+        throw new Error("error retreiving last updated block");
+    }
+}
+
+
+// gets all ctokens from pool or all pools if pool is undefined
+export async function getPoolMetadata(chain: number, pAddr: string | undefined) {
+    let query = `SELECT * FROM fuse_data.poolMetadata WHERE chain = $1`;
+    let append = `;`;
+    
+    if(pool != undefined) { append = `AND address = '`+pAddr+`';`}
+    query += append;
+
+    try{ return (await pool.query(query, [chain])).rows; }
+    catch (err: any) {
+        throw new Error("Error getting cTokensFromPool: " + err);
+    }
+
+}
+
+
+export async function getCTokenMetadata(chain: number, cAddr: string | undefined) {
+    let query = `SELECT * FROM fuse_data.cTokenMetadata WHERE chain = $1`;
+    let append = `;`;
+
+    if(cAddr != undefined) { append = `AND address = '`+cAddr+`';`}
+    query += append;
+
+    try{ return (await pool.query(query, [chain])).rows; }
+    catch (err: any) {
+        throw new Error("Error getting cTokensFromPool: " + err);
+    }
+
+}
+
+export async function getUnderlingMetadata(chain: number, uAddr: string | undefined) {
+    
+}
+
+////////////// SETTERS /////////////////
+
+// adds pool and tokens to poolmetadata
+export async function addPool(
+    chain: number, 
+    pAddr: string, 
+    block: number,
+    stamp: number, 
+    cToks: string[]
+    ) {
+    let id = chain+pAddr;
+    let query = `
+    INSERT INTO fuse_info.poolmetadata(chain, address, block, timestamp, ctokens)
+    VALUES ($1, $2, $3, $4, $5)`;
+    try {
+        await pool.query(query, [chain, pAddr, block, stamp, cToks]);
+    } catch (err: any) {
+        throw new Error("Error adding pool: " + err);
+    }
+
+}
+
 // adds token data to token
 export async function addCTokenData(
     chain:       number, 
@@ -111,49 +190,36 @@ export async function addCTokenData(
         throw new Error("error writing to " + id);
     }
 }
-async function test() {
-   console.log(await addTable(0, "testnamee"));
 
-}
-//test();
+export async function addCTokenMetadata(
+    chain: number, 
+    cAddr: string, 
+    under: string, 
+    pAddr:  string, 
+    name:  string) {
+        let query = `
+        INSERT INTO fuse_info.cTokenMetadata(chain, address, underlying, pool, name)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (address) DO NOTHING;`;
 
-// sets new table for token data
-// --DONE
-async function addTable(chain: number, address: string) {
-    let id = chain+address;
-    try{ 
-        let query = `CREATE TABLE IF NOT EXISTS
-        token_info."`+id+`" (
-            datetime    TIMESTAMP PRIMARY KEY,
-            totalsupply DECIMAL(78,0),
-            totalborrow DECIMAL(78,0),
-            liquidity   DECIMAL(78,0)
-            );`; // TODO: change token_info to token_info for prod
-        let res = await pool.query(query);
-            return res;
-       } catch (err) {
-           console.log(err);
-        throw new Error("error creating table if not exists");
-    }
+        try {
+            await pool.query(query, [chain, cAddr, under, pAddr, name]);
+        } catch (err: any) {
+            throw new Error("error adding cTokenMetadata: " + err);
+        }
 }
 
-
-// gets the last synced block for a given network
-// --DONE 
-export async function getBlockLastUpdated(network: number) {
-
-    try{
-        let str = `
-        SELECT block_last_updated 
-        FROM metadata.networkmetadata
-        WHERE network = $1;`;
-        let networkInfo = await pool.query(str, [network]);
+export async function addUnderlyingMetaData(
+    chain: number,
+    uAddr: string,
+    pAddr: string[]) {
         
-        return networkInfo.rows[0].block_last_updated;
-    } catch (err) {
-        throw new Error("error retreiving last updated block");
-    }
+
 }
+
+
+
+
 
 
 // sets the last synced block for a given network
@@ -204,6 +270,7 @@ export async function getAllCTokens() {
     
     return query.rows;
 }
+
 
 
 

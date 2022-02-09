@@ -5,9 +5,7 @@ import * as ntwk from "./ChainParse";
 
 import { CHAINID, networks } from "../assets/Networks"
 
-import * as db from './Index';
-import { pool } from "./dbOperations/db";
-import { NumberDataType } from "sequelize/dist";
+import * as db from './Queries';
 
 
 // ===========  TYPES  =========== // 
@@ -91,7 +89,8 @@ async function sync(chain: number, exactTime: boolean) {
     
     // @notice prepares query time intervals in blocks
     // Exhibit A why javascript is so bad
-    let currBlock = mem.lastUpdated;
+    let currBlock = mem.lastUpdated-mem.blocks;
+   
     let increment = mem.blocks;
     let endBlock  = await mem.web3.eth.getBlockNumber();
 
@@ -115,7 +114,7 @@ async function sync(chain: number, exactTime: boolean) {
         let timestamp = blockInfo.timestamp;
 
         
-        console.log(timestamp);
+        console.log(currBlock);
        
         for(let j = 0; j < poolCount; j++) {
 
@@ -177,8 +176,7 @@ async function sync(chain: number, exactTime: boolean) {
  * @param mem netowrk memory instance to read / write 
  * @returns sorted list of block timestamps for all fuse pools // TODO: debug potentially for arbitrum 
  */
-async function getAllPools(mem: memory) {
-
+async function setAllPools(mem: memory) {
     let pools = await contract(
         mem.dirInfo.addr, 
         mem.dirInfo.abi, 
@@ -189,8 +187,9 @@ async function getAllPools(mem: memory) {
     let poolBlockMap:  Map<number, string> = new Map();; // key: blockDeployed, value: comptrollerAddress
 
     for(let i = 0; i < pools.length; i++) {
-            poolBlockMap.set(pools[i].blockPosted, pools[i].comptroller); 
-            poolBlockList.push(pools[i].blockPosted);
+        let block = pools[i].blockposted;
+            poolBlockMap.set(block, pools[i].comptroller); 
+            poolBlockList.push(block);
     }
 
     poolBlockList.sort();
@@ -280,6 +279,8 @@ async function addCTokenToUnderlying(chain: number, under: string, cAddr: string
     } 
 
 }
+
+
 
 
 
