@@ -11,12 +11,6 @@ in line 7 of: ./src/Index.ts
 
 
 # TODO
-1) change nomenclature []  
-2) add liquidity and total borrow []
-3) add endpoints []
-4) enable upserts for existing data and adding new fields []
-5) add underlying tokens 
-6) (optional) use event logs to prevent unnecessary calls (this logic can be implemented in future fuse leverage position history) 
-7) figure out arbitrum RPC issues
-8) clean up network file, copy from sdk
-9) (do 4th) comment and clean code
+1) finish modularizing 
+2) test and finish new schema changes 
+3) event indexing 
