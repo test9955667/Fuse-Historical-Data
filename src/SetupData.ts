@@ -19,7 +19,7 @@ export default async function() {
     let ntwk: network =  NETWORKS[CHAINS[MAINNETS[i]]];
     const web3 = new Web3(new Web3.providers.HttpProvider(ntwk.rpc));
 
-
+    await setAllPools(web3, ntwk);
     // get and or set all pools in database
 }
 
@@ -30,10 +30,18 @@ type blockPool = {
 
 type poolResult = {
     chain:     number
-    address:   string
+    pool:   string
     block:     number
     timestamp: number
     ctokens:   string[]
+}
+
+type dirResult = {
+    name:            string,
+    creator:         string,
+    comptroller:     string,
+    blockPosted:     number,
+    timestampPosted: number,
 }
 
 type cTokenResult = {
@@ -49,40 +57,61 @@ type underResult = {
     cTokens:    string[]
 }
 
+// Sets all pools that arent already in the database
+// @return blockPool[] object for historic search to use for chain-queries
 async function setAllPools(web3: Web3, ntwk: network) {
     console.log("setting all current pools with data");
+    const dir: Contract = new web3.eth.Contract(dirAbi, ntwk.dirAddr);
     let poolBlockList: blockPool[] = [];
 
+    // list pools and ctokens of pool data in db
     let data: poolResult[] = (await db.getPoolMetadata(ntwk.id, undefined));
-    let pools = data.map(d => d.address);
-    let ctokens = data.map(d => d.ctokens); 
+    // helper for symDiff
+    let dbPools = data.map(d => d.pool);
 
-    const dir = await new web3.eth.Contract(dirAbi, ntwk.dirAddr);
-    const pList: string[] = await dir.methods.getAllPools().call();
-
-    // symmetric difference of the two lists to check chain
-    pools = pools.filter(a => !pList.includes(a))
-    .concat(pList.filter(a => !pools.includes(a)));
-
-    pools.forEach((async (pAddr: string) => {
-        const pool:  Contract = await new web3.eth.Contract(cmpAbi, pAddr);
-        const block: number   = await pool.methods.blockposted().call();
-        const cToks: string[] = await pool.methods.getCTokensFromPool(pAddr).call();
+    // list fuse pools stored in directory
+    let pList: dirResult[] = await dir.methods.getAllPools().call();
+    // helper for symDiff
+    let chPools = pList.map(p => p.comptroller);
     
-        let stamp = (await web3.eth.getBlock(block)).timestamp;
-        stamp = typeof(stamp) == 'number' ? stamp : Number(stamp);
+    // gets all pools in the directory, but not yet in db
+    pList = pList.filter((a) => !dbPools.includes(a.comptroller));
+    data.filter(d => !chPools.includes(d.pool));
+    for(let {pool, block, timestamp} of data) {
+        poolBlockList.push({block, pool});
+        let res: dirResult = ({
+            name:            "",
+            creator:         "",
+            comptroller:     pool,
+            blockPosted:     block,
+            timestampPosted: timestamp,
+        });
+        pList.push(res);
+    }
 
-        poolBlockList.push({block: block, pool: pAddr});
-        ctokens.concat(cToks);
-        await db.addPool(ntwk.id, pAddr, block, stamp, cToks);
-    }));
+
+    for(let i = 0; i < pList.length; i++) { 
+        let pRes = pList[i];
+        // gets metadata of pool
+        const pool:  Contract = await new web3.eth.Contract(cmpAbi, pRes.comptroller);
+        const cToks: string[] = await pool.methods.getAllMarkets().call();
+    
+        let stamp = (await web3.eth.getBlock(pRes.blockPosted)).timestamp;
+        stamp = typeof(stamp) == 'number' ? stamp : Number(stamp);
+     
+        poolBlockList.push({block: pRes.blockPosted, pool: pRes.comptroller});
+        
+        let res = await db.addPool(ntwk.id, pRes.comptroller, pRes.blockPosted, stamp, cToks);
+    }
 
     poolBlockList.sort((a, b) => a.block - b.block);
+    console.log(poolBlockList);
     // TODO: here
 
 }
 
-// 
+
+// Sets all cTokens and corresponging metadata that doesnt already in the database
 async function setAllTokens(web3: Web3, ntwk: network, cTokens: string[], pools: blockPool[]) {
     console.log("setting all underlying metadata");
     let unders: underResult[] = [];
@@ -90,9 +119,12 @@ async function setAllTokens(web3: Web3, ntwk: network, cTokens: string[], pools:
     let tokens = data.map(d => d.token);
 
     // symmetric difference of the two lists to check chain
+    // @dev its ok to pause the sync if needed here,
+    // thats what this whole function is for 
     tokens = tokens.filter(a => !cTokens.includes(a))
     .concat(cTokens.filter(a => !tokens.includes(a)));
 
+    // adds cToken data to db and prepares lists of cTokens for each underlying
     tokens.forEach((async (cAddr: string) => {
         const cToken: Contract = await new web3.eth.Contract(tokAbi, cAddr);
         const name:   string   = await cToken.methods.name().call();
@@ -105,13 +137,11 @@ async function setAllTokens(web3: Web3, ntwk: network, cTokens: string[], pools:
         if (underMeta) {
             underMeta.cTokens.push(cAddr);
         } else {
-            unders.push({
-                underlying: under,
-                cTokens:    [cAddr]
-            });
+            unders.push({ underlying: under, cTokens: [cAddr] });
         }
     }));
 
+    // adds the lists for each underling to the db
     unders.forEach(async (under) => { 
         await db.addUnderlyingMetaData(ntwk.id, under.underlying, under.cTokens);
     });

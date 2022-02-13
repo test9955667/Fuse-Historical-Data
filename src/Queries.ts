@@ -91,7 +91,7 @@ export async function getPoolMetadata(chain: number, pAddr: string | undefined) 
     let query = `SELECT * FROM fuse_data.poolMetadata WHERE chain = $1`;
     let append = `;`;
     
-    if(pool != undefined) { append = `AND address = '`+pAddr+`';`}
+    if(pool != undefined) { append = `AND pool = '`+pAddr+`';`}
     query += append;
 
     try{ return (await pool.query(query, [chain])).rows; }
@@ -120,6 +120,11 @@ export async function getUnderlingMetadata(chain: number, uAddr: string | undefi
     
 }
 
+export async function getBlockLastUpdated(chain: number) {
+    let query = `SELECT block_last_updated FROM fuse_data.networkMetadata WHERE chain = $1;`;
+    try{ return (await pool.query(query, [chain])).rows[0].block_last_updated; }
+    catch (err: any) { throw new Error("Error getting block last updated: " + err); }
+}
 ////////////// SETTERS /////////////////
 
 // adds pool and tokens to poolmetadata
@@ -132,10 +137,12 @@ export async function addPool(
     ) {
     let id = chain+pAddr;
     let query = `
-    INSERT INTO fuse_info.poolmetadata(chain, address, block, timestamp, ctokens)
-    VALUES ($1, $2, $3, $4, $5)`;
+    INSERT INTO fuse_data.poolMetadata(chain, pool, block, timestamp, ctokens)
+    VALUES ($1, $2, $3, $4, $5)
+    ON CONFLICT ON CONSTRAINT chainpool_unq DO NOTHING`;
     try {
-        await pool.query(query, [chain, pAddr, block, stamp, cToks]);
+        let q = await pool.query(query, [chain, pAddr, block, stamp, cToks]);
+        return q;
     } catch (err: any) {
         throw new Error("Error adding pool: " + err);
     }
@@ -158,7 +165,7 @@ export async function addCTokenData(
         // 4) add datetime as value for table name for last called
     let id = chain+address;
 
-    await addTable(chain, address);
+    // await addTable(chain, address);
 
     try {
         let append = `DO NOTHING`;
