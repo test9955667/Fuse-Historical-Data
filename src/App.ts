@@ -1,8 +1,8 @@
 const express = require("express");
 const Pool = require("pg").Pool;
 import {env} from "../ecosystem.config";
-import migrations from "../migrations/migrations";
-import * as setup from "./SetupData";
+import migrations from "./migrations/migrations";
+import * as setup from "./utils/SetupData";
 const app = express();
 
 

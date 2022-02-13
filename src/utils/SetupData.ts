@@ -1,9 +1,9 @@
 import * as env from '../assets/Networks'
-import * as db from './Queries';
+import * as db from '../dbOperations/Queries';
 import Web3 from 'web3';
 import {Contract} from 'web3-eth-contract';
 import {AbiItem} from 'web3-utils';
-import { mapFinderOptions } from 'sequelize/dist/lib/utils';
+
 
 type  network  = env.network;
 const MAINNETS = env.MAINNETS;
@@ -20,8 +20,10 @@ export default async function() {
     let ntwk: network =  NETWORKS[CHAINS[MAINNETS[i]]];
     const web3 = new Web3(new Web3.providers.HttpProvider(ntwk.rpc));
 
-    // await setAllPools(web3, ntwk);
-    await getEvents(web3, ntwk);
+    let poolBlockList: blockAddr[] = await setAllPools(web3, ntwk);
+    return poolBlockList;
+
+    // await getEvents(web3, ntwk); // TODO: implement later
     // get and or set all pools in database
 }
 
@@ -73,8 +75,7 @@ async function setAllPools(web3: Web3, ntwk: network) {
 
     // list fuse pools stored in directory
     let pList: dirResult[] = await dir.methods.getAllPools().call();
-    // helper for symDiff
-    let chPools = pList.map(p => p.comptroller);
+
     
     pList.forEach(async (p) => {
         poolBlockList.push({ block: p.blockPosted, addr: p.comptroller });

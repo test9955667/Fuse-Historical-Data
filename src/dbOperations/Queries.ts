@@ -1,7 +1,7 @@
 const express = require("express");
 const Pool = require("pg").Pool;
 import { clear, time } from "console";
-import {env} from "../ecosystem.config";
+import {env} from "../../ecosystem.config";
 const app = express();
 
 app.use(express.json()); // 

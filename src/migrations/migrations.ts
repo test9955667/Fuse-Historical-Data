@@ -1,4 +1,4 @@
-import { pool } from "../src/Queries"
+import { pool } from "../dbOperations/Queries"
 
 
 export default async function migrations() {

@@ -1,12 +1,12 @@
 import Web3 from "web3";
 import { AbiItem } from 'web3-utils';
 import { Contract } from "web3-eth-contract";
-import * as ntwk from "./ChainParse";
 
-import { CHAINID, networks } from "../assets/Networks"
+import { CHAINID, networks } from "./assets/Networks"
 
-import * as db from './Queries';
-
+import * as db from './dbOperations/Queries';
+import * as setup from './utils/SetupData';
+import * as env from './utils/getEnv';
 
 // ===========  TYPES  =========== // 
 type network = { network: keyof typeof CHAINID }
@@ -27,6 +27,11 @@ type memory = {
     cTokensOfPool: Map<string, string[]>
 }
 
+type blockAddr = {
+    block: number
+    addr:  string
+}
+
 // ===== GLOBAL MEMORY ===== //
 let networkNames: number[] = [];
 let networkMap: Map<number, memory> = new Map();
@@ -43,23 +48,8 @@ async function entry(networks: network[], exactTime: boolean) {
     for(let i = 0; i < networks.length; i++) {
         // Create network memory instance
         let chain = CHAINID[networks[i].network];
-        let network: memory = {
-        web3          : new Web3(new Web3.providers.HttpProvider(ntwk.getUrl(chain))),    
-        chain         : chain,
-        blocks        : ntwk.getBlocks(chain),
-        tokAbi        : ntwk.getCTokenABI(chain),
-        cmpAbi        : ntwk.getComptrollerABI(chain),
-        genesis       : ntwk.getGenesis(chain),
-        dirInfo       : ntwk.getDirInfo(chain),
-        lensInfo      : ntwk.getLensInfo(chain),
-        lastUpdated   : await db.getBlockLastUpdated(chain),
-        underlyingMap : new Map(), 
-        cTokensOfPool : new Map(),
-        }
+        let network: memory = await env.getEnv(chain);
 
-        // Set network instance in memory 
-        networkMap.set(chain, network);
-        networkNames.push(chain);
 
         await sync(chain, exactTime);
     }
@@ -75,11 +65,14 @@ async function sync(chain: number, exactTime: boolean) {
     let mem  = networkMap.get(chain);
     if(mem == undefined) {return}
 
-    let { poolBlockList, poolBlockMap } = await getAllPools(mem);
+    let poolBlockList: blockAddr[] = await setup.default();
     if(poolBlockList[0] == undefined) {return;}
 
-    let unders = await getAllUnderlying(mem, poolBlockList, poolBlockMap);
+    let unders = await getAllUnderlying(mem, poolBlockList);
     
+    console.log(unders.length);
+
+    if(5*5==25) return;
     await clearUnderlying(mem, unders, exactTime);
     // if(5*5 == 25) {return;}
 
@@ -107,7 +100,7 @@ async function sync(chain: number, exactTime: boolean) {
             previous += 1800; 
         } 
 
-        while(currBlock > poolBlockList[poolCount]) { poolCount++; }
+        while(currBlock > poolBlockList[poolCount].block) { poolCount++; }
         mem.lastUpdated = currBlock;
 
         let blockInfo = await mem.web3.eth.getBlock(currBlock);
@@ -119,7 +112,7 @@ async function sync(chain: number, exactTime: boolean) {
         for(let j = 0; j < poolCount; j++) {
 
             // gets and or sets pool instance 
-            let pAddr = poolBlockMap.get(poolBlockList[j]);
+            let pAddr = poolBlockList[j].addr;
             if(pAddr == undefined) { continue; } 
             let pool = contract(pAddr, mem.cmpAbi, mem.web3);
 
@@ -246,23 +239,15 @@ type cTokenItem = {
     underlying: string;
     name: string;
 }
-async function getAllUnderlying(mem: memory, poolsBlockList: number[], poolBlockMap: Map<number, string>) {
+async function getAllUnderlying(mem: memory, poolsBlockList: blockAddr[]) {
     let tokens: cTokenItem[] = await db.getAllCTokens();
-    let len = mem.chain.toString().length;
     let unders: string[] = [];
 
-    for(let i = 0; i < tokens.length; i++) {
-        let row = tokens[i];
-        if(row.token.length != Number(len)+Number(42)) continue;
-
-        let ntwk = row.token.slice(0, len);
-
-        if(Number(ntwk) == mem.chain) {
-            let addr = row.token.slice(-42);
-            unders.push(row.underlying);
-            mem.underlyingMap.set(addr, row.underlying);
-        }        
-    }
+    tokens.forEach(token => {
+        if(unders.indexOf(token.underlying) == -1) {
+            unders.push(token.underlying);
+        }
+    });
     return unders;
 }
 
