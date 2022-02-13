@@ -8,10 +8,10 @@ const app = express();
 
 // call migrations 
 async function run() {
-    await migrations();
-    console.log("HERE");
+    //await migrations();
     // call setup
-    setup.default();
+    await setup.default();
+
 }
 run();
 

@@ -45,7 +45,7 @@ export const CHAINID: {[key: string]: number } = {
 export const networks: {[key: number]: network} = {
     1: {
         id: 1,
-        rpc: "https://eth-mainnet.alchemyapi.io/v2/2Mt-6brbJvTA4w9cpiDtnbTo6qOoySnN",
+        rpc: "https://eth-mainnet.alchemyapi.io/v2/LJVLCa0Ry_071ika2ECrnuP2Idk1Z7kS",
         dirAddr: "0x835482FE0532f169024d5E9410199369aAD5C77E",
         lensAddr: "0x6Dc585Ad66A10214Ef0502492B0CC02F0e836eec",
         blocksIn30: 140,

@@ -60,7 +60,15 @@ export default async function migrations() {
         network TEXT PRIMARY  KEY    NOT NULL,
         block_last_updated    BIGINT NOT NULL,
         genesis_block         BIGINT 
-    );`
+    );
+    
+    
+    CREATE TABLE IF NOT EXISTS fuse_data.eventMetadata(
+        chain                 INTEGER NOT NULL,
+        block                 BIGINT NOT NULL,
+        ctoken                TEXT[] NOT NULL,  
+    );
+    `
     
     await pool.query(tables);
     

@@ -91,9 +91,8 @@ export async function getPoolMetadata(chain: number, pAddr: string | undefined) 
     let query = `SELECT * FROM fuse_data.poolMetadata WHERE chain = $1`;
     let append = `;`;
     
-    if(pool != undefined) { append = `AND pool = '`+pAddr+`';`}
+    if(pAddr != undefined) { append = ` AND pool = '`+pAddr+`';`}
     query += append;
-
     try{ return (await pool.query(query, [chain])).rows; }
     catch (err: any) {
         throw new Error("Error getting cTokensFromPool: " + err);

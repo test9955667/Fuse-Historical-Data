@@ -3,6 +3,7 @@ import * as db from './Queries';
 import Web3 from 'web3';
 import {Contract} from 'web3-eth-contract';
 import {AbiItem} from 'web3-utils';
+import { mapFinderOptions } from 'sequelize/dist/lib/utils';
 
 type  network  = env.network;
 const MAINNETS = env.MAINNETS;
@@ -19,13 +20,14 @@ export default async function() {
     let ntwk: network =  NETWORKS[CHAINS[MAINNETS[i]]];
     const web3 = new Web3(new Web3.providers.HttpProvider(ntwk.rpc));
 
-    await setAllPools(web3, ntwk);
+    // await setAllPools(web3, ntwk);
+    await getEvents(web3, ntwk);
     // get and or set all pools in database
 }
 
-type blockPool = {
+type blockAddr = {
     block: number
-    pool:  string
+    addr:  string
 }
 
 type poolResult = {
@@ -62,7 +64,7 @@ type underResult = {
 async function setAllPools(web3: Web3, ntwk: network) {
     console.log("setting all current pools with data");
     const dir: Contract = new web3.eth.Contract(dirAbi, ntwk.dirAddr);
-    let poolBlockList: blockPool[] = [];
+    let poolBlockList: blockAddr[] = [];
 
     // list pools and ctokens of pool data in db
     let data: poolResult[] = (await db.getPoolMetadata(ntwk.id, undefined));
@@ -74,45 +76,35 @@ async function setAllPools(web3: Web3, ntwk: network) {
     // helper for symDiff
     let chPools = pList.map(p => p.comptroller);
     
+    pList.forEach(async (p) => {
+        poolBlockList.push({ block: p.blockPosted, addr: p.comptroller });
+    });
+
     // gets all pools in the directory, but not yet in db
     pList = pList.filter((a) => !dbPools.includes(a.comptroller));
-    data.filter(d => !chPools.includes(d.pool));
-    for(let {pool, block, timestamp} of data) {
-        poolBlockList.push({block, pool});
-        let res: dirResult = ({
-            name:            "",
-            creator:         "",
-            comptroller:     pool,
-            blockPosted:     block,
-            timestampPosted: timestamp,
-        });
-        pList.push(res);
-    }
-
 
     for(let i = 0; i < pList.length; i++) { 
         let pRes = pList[i];
         // gets metadata of pool
-        const pool:  Contract = await new web3.eth.Contract(cmpAbi, pRes.comptroller);
+        const pool:  Contract = new web3.eth.Contract(cmpAbi, pRes.comptroller);
         const cToks: string[] = await pool.methods.getAllMarkets().call();
     
         let stamp = (await web3.eth.getBlock(pRes.blockPosted)).timestamp;
         stamp = typeof(stamp) == 'number' ? stamp : Number(stamp);
      
-        poolBlockList.push({block: pRes.blockPosted, pool: pRes.comptroller});
+        poolBlockList.push({block: pRes.blockPosted, addr: pRes.comptroller});
         
         let res = await db.addPool(ntwk.id, pRes.comptroller, pRes.blockPosted, stamp, cToks);
     }
 
     poolBlockList.sort((a, b) => a.block - b.block);
-    console.log(poolBlockList);
-    // TODO: here
+    return poolBlockList;
 
 }
 
 
 // Sets all cTokens and corresponging metadata that doesnt already in the database
-async function setAllTokens(web3: Web3, ntwk: network, cTokens: string[], pools: blockPool[]) {
+async function setAllTokens(web3: Web3, ntwk: network, cTokens: string[], pools: blockAddr[]) {
     console.log("setting all underlying metadata");
     let unders: underResult[] = [];
     let data:  cTokenResult[] = (await db.getCTokenMetadata(ntwk.id, undefined));
@@ -148,6 +140,73 @@ async function setAllTokens(web3: Web3, ntwk: network, cTokens: string[], pools:
     
 }
 
-  
+//////////// WORK IN PROGRESS ///////////////
+
+// The code below is part of event indexing optimization to cut down on the number
+// of cToken calls made per block. 
+
+type blockEvents = {
+    block:  number,
+    events: string[]
+}
+// make a list of {block, ctoken[]} for events
+async function getEvents(web3: Web3, ntwk: network) {
+    console.log("Ordering all token events");
+
+    let tMap: Map<string, string> = new Map();
+    let eventMap: Map<number, typeof tMap> = new Map();
+    let eventList: blockEvents[] = [];
+
+    let tokens = await db.getPoolMetadata(ntwk.id, undefined);
+
+    for(let i = 0; i < tokens.length; i++) {
+        let tList = tokens[i].ctokens;
+        let blockPosted = tokens[i].block;
+        let currBlock = await web3.eth.getBlockNumber();
+        let blockdiff = currBlock - blockPosted;
+        let chunkNum = Math.ceil(blockdiff / 2000);
+
+        console.log(blockPosted + " " + currBlock);
+        for(let j = 0; j < tList.length; j++) {
+            let token = new web3.eth.Contract(tokAbi, tList[j]);
+            let start = blockPosted;
+            
+            for(let k = 0; k < chunkNum-1; k++) {
+                let end = Number(start) + 2000;
+            
+                let events = await token.getPastEvents('allEvents', {fromBlock: start, toBlock: end});
+                events.forEach(async (e) => {
+                    if(!eventMap.has(e.blockNumber)) {eventMap.set(e.blockNumber, new Map());}
+                    eventMap.set(e.blockNumber, tMap.set(tList[j], tList[j]));
+                });
+                start = Number(start)+2000;
+                
+            }
+            console.log(start + " " + currBlock);
+
+            break;
+            let end = currBlock;
+            let events = await token.getPastEvents('allEvents', {fromBlock: start, toBlock: end});
+            events.forEach(async (e) => {
+                if(!eventMap.has(e.blockNumber)) {
+                    eventMap.set(e.blockNumber, new Map());
+                    eventMap.set(e.blockNumber, tMap.set(tList[j], tList[j]));
+                }
+
+            });
+
+        }
+        break;
+
+    }
+    eventMap.forEach((v, k) => {
+        let tokens: string[] = [];
+        v.forEach((v, k) => {
+            tokens.push(k);
+        });
+        eventList.push({block: k, events: tokens});
+    });
+    console.log(eventList.length);
+}
 
 
