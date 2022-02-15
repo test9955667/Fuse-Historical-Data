@@ -14,3 +14,5 @@ in line 7 of: ./src/Index.ts
 1) finish modularizing 
 2) test and finish new schema changes 
 3) event indexing 
+
+test 
