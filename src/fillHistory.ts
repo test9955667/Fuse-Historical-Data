@@ -49,8 +49,7 @@ async function entry(networks: network[], exactTime: boolean) {
         // Create network memory instance
         let chain = CHAINID[networks[i].network];
         let network: memory = await env.getEnv(chain);
-
-
+        networkMap.set(chain, network);
         await sync(chain, exactTime);
     }
 
@@ -70,10 +69,9 @@ async function sync(chain: number, exactTime: boolean) {
 
     let unders = await getAllUnderlying(mem, poolBlockList);
     
-    console.log(unders.length);
 
-    if(5*5==25) return;
-    await clearUnderlying(mem, unders, exactTime);
+
+    // await clearUnderlying(mem, unders, exactTime);
     // if(5*5 == 25) {return;}
 
 // =============  INITIAL TIME VALUES =========== //  

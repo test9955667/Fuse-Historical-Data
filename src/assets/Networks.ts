@@ -7,7 +7,8 @@ export type network = {
     dirAddr: string,
     lensAddr: string,
     blocksIn30: number,
-    genesisBlock: number
+    genesisBlock: number,
+    apiNetworkName: string
 }
 
 export enum MAINNETS {
@@ -48,64 +49,72 @@ export const networks: {[key: number]: network} = {
         rpc: "https://eth-mainnet.alchemyapi.io/v2/LJVLCa0Ry_071ika2ECrnuP2Idk1Z7kS",
         dirAddr: "0x835482FE0532f169024d5E9410199369aAD5C77E",
         lensAddr: "0x6Dc585Ad66A10214Ef0502492B0CC02F0e836eec",
-        blocksIn30: 140,
+        blocksIn30: 1800,
         genesisBlock: 12060711, 
+        apiNetworkName: "eth"
     },
     3: {
         id: 3,
         rpc: "https://eth-mainnet.alchemyapi.io/v2/2Mt-6brbJvTA4w9cpiDtnbTo6qOoySnN",
         dirAddr: "",
         lensAddr: "",
-        blocksIn30: 140,
-        genesisBlock: 12060711,
+        blocksIn30: 0,
+        genesisBlock: 0,
+        apiNetworkName: "ropsten"
     }, 
     4: {
         id: 4,
         rpc: "https://eth-mainnet.alchemyapi.io/v2/2Mt-6brbJvTA4w9cpiDtnbTo6qOoySnN",
         dirAddr: "",
         lensAddr: "",
-        blocksIn30: 140,
-        genesisBlock: 12060711,
+        blocksIn30: 0,
+        genesisBlock: 0,
+        apiNetworkName: "rinkeby"
     },
     5: {
         id: 5,
         rpc: "https://eth-mainnet.alchemyapi.io/v2/2Mt-6brbJvTA4w9cpiDtnbTo6qOoySnN",
         dirAddr: "",
         lensAddr: "",
-        blocksIn30: 140,
-        genesisBlock: 12060711,
+        blocksIn30: 0,
+        genesisBlock: 0,
+        apiNetworkName: "goerli"
     },
     42161: {
         id: 41261,
         rpc: "https://arb-mainnet.g.alchemy.com/v2/rNfYbx5O5Ng09hw9s9YE-huxzVNaWWbX",
         dirAddr: "0xc201b8c8dd22c779025e16f1825c90e1e6dd6a08",
         lensAddr: "0xD6e194aF3d9674b62D1b30Ec676030C23961275e",
-        blocksIn30: 140,
-        genesisBlock: 12060711,
+        blocksIn30: 0,
+        genesisBlock: 0,
+        apiNetworkName: ""
     },
     421611: {
         id: 42161,
         rpc: "https://eth-mainnet.alchemyapi.io/v2/2Mt-6brbJvTA4w9cpiDtnbTo6qOoySnN",
         dirAddr: "",
         lensAddr: "",
-        blocksIn30: 140,
-        genesisBlock: 12060711,
+        blocksIn30: 0,
+        genesisBlock: 0,
+        apiNetworkName: ""
     },
     10: {
         id: 10,
         "rpc": "https://eth-mainnet.alchemyapi.io/v2/2Mt-6brbJvTA4w9cpiDtnbTo6qOoySnN",
         "dirAddr": "",
         "lensAddr": "",
-        "blocksIn30": 140,
-        "genesisBlock": 12060711,
+        "blocksIn30": 0,
+        "genesisBlock": 0,
+        apiNetworkName: ""
     },
     31337: {
         id: 31337,
         rpc: "https://eth-mainnet.alchemyapi.io/v2/2Mt-6brbJvTA4w9cpiDtnbTo6qOoySnN",
         dirAddr: "",
         lensAddr: "",
-        blocksIn30: 140,
-        genesisBlock: 12060711,
+        blocksIn30: 0,
+        genesisBlock: 0,
+        apiNetworkName: ""
     }
 
 }

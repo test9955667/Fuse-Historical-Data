@@ -20,42 +20,49 @@ export const pool = new Pool({
 
 ///////// ENDPOINT FUNCTIONS //////////
 
-/**
- * // TODO: debug with sharad 
- * @param chain chainID to search token data for
- * @param token token address to query 
- * @param start beginning of time range to query UNIX | timestamp, LEAVE 0 for all time
- * @param end   end of time range to query UNIX | timestamp, LEAVE 0 for NOW
- * @param interval NOT IN USE | interval to query in seconds
- * @returns JSON of token data
- */
-async function getRangeSingle(
-    chain: string,   // chainID 
+export async function getRangeSingle(
+    chainid: string,   // chainid 
     token: string,   // token address
     start: number,   // (OPTIONAL) beginning of query, leave 0 for beginning 
-    end: number,     // (OPTIONAL) end of query, leave 0 for current time
-    interval: number // time interval of raw data, can be used for smoothing lowest denom is "half"(30min),
+    end:   number,   // (OPTIONAL) end of query, leave 0 for current time
     ) {
-    let id = chain+token;
 
+    //console.log(chainid);
+    //console.log(token);
+
+    try {
     if(start == 0) {
-
-        let res = (await pool.query(
-            `SELECT datetime FROM token_info."`+id+`" LIMIT 1;`
-        )).rows[0].datetime;
-        start = Date.parse(res).valueOf()/1000;
+        let res1 = (await pool.query(`
+            SELECT datetime FROM fuse_data.ctokendata
+            WHERE (chainid = $1) AND (addr = $2)
+            LIMIT 1;`,
+            [chainid, token])
+        ).rows[0].datetime;
+        start = Date.parse(res1).valueOf()/1000;
     }
-
     if(end == 0) {
-        let res = (await pool.query(
-            `SELECT datetime FROM token_info."`+id+`" ORDER BY datetime DESC LIMIT 1;`
-        )).rows[0].datetime;
-        end = Date.parse(res).valueOf()/1000;
+        let res2 = (await pool.query(`
+            SELECT datetime FROM fuse_data.ctokendata 
+            WHERE (chainid = $1) AND (addr = $2)
+            ORDER BY datetime DESC LIMIT 1;`,
+            [chainid, token])
+        ).rows[0].datetime;
+        end = Date.parse(res2).valueOf()/1000;
     }
- 
-    let query = await pool.query(`SELECT *  
-    FROM token_info."`+id+`"
-    WHERE (to_timestamp($1) <= datetime) AND (datetime <= to_timestamp($2));`);
+    
+    let query = (await pool.query(`SELECT *  
+    FROM fuse_data.ctokendata
+    WHERE 
+    (chainid = $1) AND 
+    (addr    = $2) AND 
+    (datetime >= to_timestamp($3)) AND 
+    (datetime <= to_timestamp($4));`,
+    [chainid, token, start, end])).rows;
+    return query;
+    } catch (err) {
+        console.log(err);
+        return err;
+    }
     
     
 }
@@ -72,14 +79,14 @@ async function getRangeSingle(
 // 4) getCTokensFromUnderlying 
 
 
-// gets the last synced block for a given network
-export async function getNetworkMetadata(chain: number) {
+// gets the last synced block for a given chainid
+export async function getchainidMetadata(chainid: number) {
     let str = `
     SELECT * 
-    FROM metadata.networkmetadata
-    WHERE network = $1;`;
+    FROM fuse_data.chainidmetadata
+    WHERE chainid = $1;`;
     try{
-        return (await pool.query(str, [chain]).rows[0]);
+        return (await pool.query(str, [chainid]).rows[0]);
     } catch (err) {
         throw new Error("error retreiving last updated block");
     }
@@ -87,13 +94,13 @@ export async function getNetworkMetadata(chain: number) {
 
 
 // gets all ctokens from pool or all pools if pool is undefined
-export async function getPoolMetadata(chain: number, pAddr: string | undefined) {
-    let query = `SELECT * FROM fuse_data.poolMetadata WHERE chain = $1`;
+export async function getPoolMetadata(chainid: number, pAddr: string | undefined) {
+    let query = `SELECT * FROM fuse_data.poolMetadata WHERE chainid = $1`;
     let append = `;`;
     
     if(pAddr != undefined) { append = ` AND pool = '`+pAddr+`';`}
     query += append;
-    try{ return (await pool.query(query, [chain])).rows; }
+    try{ return (await pool.query(query, [chainid])).rows; }
     catch (err: any) {
         throw new Error("Error getting cTokensFromPool: " + err);
     }
@@ -101,46 +108,77 @@ export async function getPoolMetadata(chain: number, pAddr: string | undefined) 
 }
 
 
-export async function getCTokenMetadata(chain: number, cAddr: string | undefined) {
-    let query = `SELECT * FROM fuse_data.cTokenMetadata WHERE chain = $1`;
+export async function getCTokenMetadata(chainid: number, cAddr: string | undefined) {
+    let query = `SELECT * FROM fuse_data.cTokenMetadata WHERE chainid = $1`;
     let append = `;`;
 
     if(cAddr != undefined) { append = `AND address = '`+cAddr+`';`}
     query += append;
 
-    try{ return (await pool.query(query, [chain])).rows; }
+    try{ return (await pool.query(query, [chainid])).rows; }
     catch (err: any) {
         throw new Error("Error getting cTokensFromPool: " + err);
     }
 
 }
 
-export async function getUnderlingMetadata(chain: number, uAddr: string | undefined) {
-    
-}
 
-export async function getBlockLastUpdated(chain: number) {
-    let query = `SELECT block_last_updated FROM fuse_data.networkMetadata WHERE chain = $1;`;
-    try{ return (await pool.query(query, [chain])).rows[0].block_last_updated; }
+export async function getBlockLastUpdated(chainid: number) {
+    let query = `SELECT lastupdated FROM fuse_data.chainidMetadata WHERE chainid = $1;`;
+    try{ return (await pool.query(query, [chainid])).rows[0].lastupdated; }
     catch (err: any) { throw new Error("Error getting block last updated: " + err); }
 }
+
+// gets underlying token corresponding to cToken
+// --DONE
+export async function getUnderlyingOfCToken(chainid: number, cToken: string) { 
+
+    let res = await pool.query(`
+        SELECT underlying FROM 
+        fuse_data.ctokenmetadata
+        WHERE token = $1;`,
+        [chainid+cToken]
+    );
+    
+    return res;
+}
+
+// gets the list of cTokens for underlying
+// --DONE
+export async function getCTokensOfUnderlying(chainid: number, underlying: string) {
+
+    let str = `SELECT cTokens FROM fuse_data.underlyingmetadata WHERE underlying = $1`
+    let query = await pool.query(str, [chainid+underlying]);
+    
+    return query;
+}
+
+export async function getAllCTokens() {
+
+    let str = `SELECT * FROM fuse_data.ctokenmetadata`;
+    let query = await pool.query(str);
+    
+    return query.rows;
+}
+
+
 ////////////// SETTERS /////////////////
 
 // adds pool and tokens to poolmetadata
 export async function addPool(
-    chain: number, 
+    chainid: number, 
     pAddr: string, 
     block: number,
     stamp: number, 
     cToks: string[]
     ) {
-    let id = chain+pAddr;
+    let id = chainid+pAddr;
     let query = `
-    INSERT INTO fuse_data.poolMetadata(chain, pool, block, timestamp, ctokens)
+    INSERT INTO fuse_data.poolMetadata(chainid, pool, block, timestamp, ctokens)
     VALUES ($1, $2, $3, $4, $5)
-    ON CONFLICT ON CONSTRAINT chainpool_unq DO NOTHING`;
+    ON CONFLICT ON CONSTRAINT chainidpool_unq DO NOTHING`;
     try {
-        let q = await pool.query(query, [chain, pAddr, block, stamp, cToks]);
+        let q = await pool.query(query, [chainid, pAddr, block, stamp, cToks]);
         return q;
     } catch (err: any) {
         throw new Error("Error adding pool: " + err);
@@ -149,170 +187,144 @@ export async function addPool(
 }
 
 // adds token data to token
-export async function addCTokenData(
-    chain:       number, 
-    address:     string, 
-    datetime:    string | number, 
+export async function addTokenData(
+    chainid:     number, 
+    datetime:    string,
+    block:       number,
+    address:     string,
+    underlying:  string, 
     totalSupply: BigInt,
-    totalBorrow: BigInt,
-    liquidity:   BigInt,
-    isCToken:    boolean
+    totalBorrow: BigInt
     ) {
-        // 1) check if token exists 
-        // 2) if not create table 
-        // 3) add info to table at datetime
-        // 4) add datetime as value for table name for last called
-    let id = chain+address;
 
-    // await addTable(chain, address);
+    try {     
+        let under = `
+            INSERT INTO fuse_data.underlyingdata(chainid,datetime,block,addr,ctoken,supply,borrow)
+            VALUES($1,$2,$3,$4,$5,$6,$7)
 
-    try {
-        let append = `DO NOTHING`;
+            ON CONFLICT(chainid,datetime,ctoken)
+                DO UPDATE SET
+                    supply = EXCLUDED.supply, 
+                    borrow = EXCLUDED.borrow
 
-        if(!isCToken) { 
-            append = `
-            DO UPDATE SET
-                totalsupply = "`+id+`".totalsupply + EXCLUDED.totalsupply, 
-                totalborrow = "`+id+`".totalborrow + EXCLUDED.totalborrow, 
-                liquidity   = "`+id+`".liquidity   + EXCLUDED.liquidity
-            `;
-        } // TODO: ADD values for underlying
+            ON CONFLICT(chainid,datetime,addr)
+                DO UPDATE SET
+                supply = underlyingdata.supply + EXCLUDED.supply, 
+                borrow = underlyingdata.borrow + EXCLUDED.borrow;`;
+
+        await pool.query(
+            under, 
+            [chainid,datetime,block,underlying,address,totalSupply,totalBorrow]);
 
 
-        let quer = `INSERT INTO
-                        token_info."`+id+`"(datetime, totalsupply, totalborrow, liquidity)
-                        VALUES(to_timestamp($1),$2,$3,$4)
-                        ON CONFLICT(datetime) 
-                        `+append+`
-                    ;`
+        let quer = `
+            INSERT INTO
+                fuse_data.ctokendata(chainid, datetime, block, addr, supply, borrow)
+                VALUES(to_timestamp($1),$2,$3,$4,$5,$6);`;
 
-        let response = await pool.query(
+        await pool.query(
             quer,
-            [datetime, totalSupply, totalBorrow, liquidity]
-        );
+            [chainid,datetime,block,address,totalSupply,totalBorrow]);
         
     } catch (err) {
         console.log(err);
-        throw new Error("error writing to " + id);
+        throw new Error(`error writing to ${underlying} and/or ${address}`);
     }
 }
 
-export async function addCTokenMetadata(
-    chain: number, 
-    cAddr: string, 
-    under: string, 
+// TODO: test
+export async function setCTokenMetadata(
+    chainid:  number, 
+    cAddr:  string, 
+    under:  string, 
     pAddr:  string, 
-    name:  string) {
+    name:   string,
+    symbol: string
+    ) {
         let query = `
-        INSERT INTO fuse_info.cTokenMetadata(chain, address, underlying, pool, name)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (address) DO NOTHING;`;
+        INSERT INTO fuse_data.cTokenMetadata(chainid, address, underlying, pool, name, symbol)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT ON CONSTRAINT chainidaddr_unq DO NOTHING;`;
 
         try {
-            await pool.query(query, [chain, cAddr, under, pAddr, name]);
+            await pool.query(query, [chainid, cAddr, under, pAddr, name, symbol]);
+            return;
         } catch (err: any) {
             throw new Error("error adding cTokenMetadata: " + err);
         }
 }
 
-export async function addUnderlyingMetaData(
-    chain: number,
-    uAddr: string,
-    pAddr: string[]) {
-        
+export async function setCTokenLastUpdated(chainid: number, cAddr: string, block: number) {
+    let str = `
+    UPDATE fuse_data.ctokenmetadata
+    SET lastupdated = $1
+    WHERE chainid = $2 
+    AND address = $3
+    ;`;
 
+    try {
+        await pool.query(str, [block, chainid, cAddr]);
+        return;
+    } catch (err) {
+        console.log(err);
+    }
 }
 
-
-
-
-
-
-// sets the last synced block for a given network
+// sets the last synced block for a given chainid
 // --DONE
-export async function setBlockLastUpdated(network: number, block: BigInt) {
+export async function setBlockLastUpdated(chainid: number, block: BigInt) {
 
     try {
         await pool.query(`
-            UPDATE metadata.networkmetadata
-            SET block_last_updated = $1
-            WHERE network = $2;`,
-            [block, network]
+            UPDATE fuse_data.chainidmetadata
+            SET lastupdated = $1
+            WHERE chainid = $2;`,
+            [block, chainid]
         );
+        return;
     } catch (err) {
-        throw new Error("error updating last block for " + network);
+        throw new Error("error updating last block for " + chainid);
     }
     
 }
 
-// gets underlying token corresponding to cToken
-// --DONE
-export async function getUnderlyingOfCToken(network: number, cToken: string) { 
-
-    let res = await pool.query(`
-        SELECT underlying FROM 
-        metadata.ctokenmetadata
-        WHERE token = $1;`,
-        [network+cToken]
-    );
-    
-    return res;
-}
-
-// gets the list of cTokens for underlying
-// --DONE
-export async function getCTokensOfUnderlying(network: number, underlying: string) {
-
-    let str = `SELECT cTokens FROM metadata.underlyingmetadata WHERE idunderlying = $1`
-    let query = await pool.query(str, [network+underlying]);
-    
-    return query;
-}
-
-export async function getAllCTokens() {
-
-    let str = `SELECT * FROM metadata.ctokenmetadata`;
-    let query = await pool.query(str);
-    
-    return query.rows;
-}
-
-
-
-
 // sets another cToken corresponding to underlying
 // --DONE
-export async function addCTokenToUnderlying(network: number, underlying: string, cToken: string) {
-
-    let make = `
-    INSERT INTO metadata.underlyingmetadata (idunderlying) VALUES($1)
-    ON CONFLICT(idunderlying) DO NOTHING;`;
-    await pool.query(make, [network+underlying]);
-
+export async function addCTokenToUnderlying(chainid: number, underlying: string, cToken: string) {
+    let arr: string[] = [];
     let str = `
-    UPDATE metadata.underlyingmetadata 
-    SET ctokens = array_append(ctokens ,$2)
-    WHERE idunderlying = $1;`;
+    INSERT INTO fuse_data.underlyingmetadata (chainid, underlying, ctokens) VALUES($1, $2, $3)
+    ON CONFLICT ON CONSTRAINT chainidunder_unq DO NOTHING;
+    `;
+    let str2 = `
+    UPDATE fuse_data.underlyingmetadata 
+    SET ctokens = array_append(ctokens, $3)
+    WHERE chainid = $1 AND underlying = $2;
+    `;
+    try {
+        await pool.query(str, [chainid, underlying, arr]);
+        await pool.query(str2, [chainid, underlying, cToken]);
+        return;
+    } catch (err) {
+        console.log(err);
+    }
 
-    await pool.query(str ,[network+underlying, cToken]);
-    
 
-}
-// 
+} 
 // --DONE
-export async function addUnderlyingToCToken(network: number, cToken: string, underlying: string) {
+export async function addUnderlyingToCToken(chainid: number, cToken: string, underlying: string) {
 
     let str = `
-    INSERT INTO metadata.ctokenmetadata(token, underlying) VALUES($1, $2)
+    INSERT INTO fuse_data.ctokenmetadata(token, underlying) VALUES($1, $2)
     ON CONFLICT(token) DO NOTHING;`
-    await pool.query(str, [network+cToken, underlying]);
+    await pool.query(str, [chainid+cToken, underlying]);
     
 }
 
 
 // --DONE
-export async function clearRow(chain: number, token: string, timestamp: number | string) {
-    let id = chain+token;
+export async function clearRow(chainid: number, token: string, timestamp: number | string) {
+    let id = chainid+token;
     try{
         /*
     

@@ -21,9 +21,9 @@ type memory = {
 }
 
 type  network  = env.network;
-const MAINNETS = env.MAINNETS;
-const CHAINS   = env.CHAINID;
-const NETWORKS = env.networks;
+export const MAINNETS = env.MAINNETS;
+export const CHAINS   = env.CHAINID;
+export const NETWORKS = env.networks;
 export const dirAbi:  AbiItem[] = require('../assets/abis/DIRV1.json');
 export const cmpAbi:  AbiItem[] = require('../assets/abis/COMPV1.json');
 export const tokAbi:  AbiItem[] = require('../assets/abis/TOKV1.json');

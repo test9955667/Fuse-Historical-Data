@@ -1,5 +1,6 @@
-import { pool } from "../dbOperations/Queries"
-
+import { pool } from "../dbOperations/Queries";
+import * as env from "../utils/getEnv";
+import * as ntwk from "../assets/Networks";
 
 export default async function migrations() {
 
@@ -14,82 +15,105 @@ export default async function migrations() {
 
     let tables = `
     CREATE TABLE IF NOT EXISTS fuse_data.cTokenData(
-        datetime              TIMESTAMP NOT NULL,
-        block                 BIGINT NOT NULL,
-        addr                  TEXT NOT NULL UNIQUE,
+        chainid               INTEGER      NOT NULL,
+        datetime              TIMESTAMP    NOT NULL,
+        block                 BIGINT       NOT NULL,
+        addr                  TEXT         NOT NULL,
         supply                DECIMAL(78),
-        borrow                DECIMAL(78),
-        liquid                DECIMAL(78)
+        borrow                DECIMAL(78)
     );
 
-    CREATE TABLE IF NOT EXISTS fuse_data.underData(
-        datetime              TIMESTAMP NOT NULL,
-        block                 BIGINT NOT NULL,
-        addr                  TEXT NOT NULL UNIQUE, 
-        totalsupply           DECIMAL(78),
-        totalborrow           DECIMAL(78),
-        totalliquid           DECIMAL(78)
+    CREATE TABLE IF NOT EXISTS fuse_data.underlyingData(
+        chainid               INTEGER      NOT NULL,
+        datetime              TIMESTAMP    NOT NULL,
+        block                 BIGINT       NOT NULL,
+        addr                  TEXT         NOT NULL UNIQUE,
+        ctoken                TEXT         NOT NULL, 
+        supply                DECIMAL(78),
+        borrow                DECIMAL(78)
     );
 
     CREATE TABLE IF NOT EXISTS fuse_data.poolMetadata(
-        chain                 INTEGER NOT NULL,
-        pool                  TEXT    NOT NULL,
-        block                 BIGINT  NOT NULL,  
-        timestamp             BIGINT  NOT NULL, 
-        ctokens               TEXT[]  NOT NULL
+        chainid               INTEGER      NOT NULL,
+        datetime              TIMESTAMP    NOT NULL, 
+        pool                  TEXT         NOT NULL,
+        block                 BIGINT       NOT NULL,  
+        ctokens               TEXT[]
     );
 
     CREATE TABLE IF NOT EXISTS fuse_data.cTokenMetadata(
-        chain                 INTEGER NOT NULL,
-        address TEXT PRIMARY  KEY  NOT NULL,
-        underlying            TEXT NOT NULL,
-        pool                  TEXT NOT NULL,
-        name                  TEXT NOT NULL
+        chainid               INTEGER      NOT NULL,
+        address TEXT PRIMARY  KEY          NOT NULL,
+        underlying            TEXT         NOT NULL,
+        pool                  TEXT         NOT NULL,
+        name                  TEXT         NOT NULL,
+        symbol                TEXT         NOT NULL,
+        lastUpdated           BIGINT       DEFAULT 0
     );
      
 
-    CREATE TABLE IF NOT EXISTS fuse_data.underMetadata(
-        chain                 INTEGER NOT NULL,
-        underlying            TEXT NOT NULL,
-        ctokens               TEXT[] NOT NULL
+    CREATE TABLE IF NOT EXISTS fuse_data.underlyingMetadata(
+        chainid               INTEGER      NOT NULL,
+        underlying            TEXT         NOT NULL,
+        ctokens               TEXT[]
     );
     
 
 
     CREATE TABLE IF NOT EXISTS fuse_data.networkMetadata(
-        network TEXT PRIMARY  KEY    NOT NULL,
-        block_last_updated    BIGINT NOT NULL,
+        chainid TEXT PRIMARY  KEY          NOT NULL,
+        lastupdated           BIGINT       NOT NULL,
         genesis_block         BIGINT 
     );
     
     
     CREATE TABLE IF NOT EXISTS fuse_data.eventMetadata(
-        chain                 INTEGER NOT NULL,
-        block                 BIGINT NOT NULL,
-        ctoken                TEXT[] NOT NULL,  
+        chainid               INTEGER      NOT NULL,
+        ctoken                TEXT         NOT NULL,
+        block                 BIGINT       NOT NULL
     );
     `
     
     await pool.query(tables);
     
     // unique constriants must be seperate in case of error
-    let cPool = `ALTER TABLE fuse_data.poolMetadata ADD CONSTRAINT chainpool_unq UNIQUE(chain,pool);`;
-    let cToke = `ALTER TABLE fuse_data.cTokenMetadata ADD CONSTRAINT chainaddr_unq UNIQUE(chain,address);`;
-    let cUndr = `ALTER TABLE fuse_data.underMetadata ADD CONSTRAINT chainunder_unq(chain, underlying);`;
+    let cPool = `ALTER TABLE fuse_data.poolMetadata ADD CONSTRAINT chainpool_unq UNIQUE(chainid,pool);`;
+    let cToke = `ALTER TABLE fuse_data.cTokenMetadata ADD CONSTRAINT chainaddr_unq UNIQUE(chainid,address);`;
+    let cUndr = `ALTER TABLE fuse_data.underlyingMetadata ADD CONSTRAINT chainunder_unq UNIQUE(chainid,underlying);`;
     await pool.query(cPool).catch((e: string) => {return});
     await pool.query(cToke).catch((e: string) => {return});
     await pool.query(cUndr).catch((e: string) => {return});
 
     // index creations must be seperate in case exists error is thrown
-    let cAddr  = `CREATE INDEX IX_cTokenData_addr ON fuse_data.cTokenData(addr);`
+    let cAddr  = `CREATE INDEX IX_cTokenData_addr ON fuse_data.cTokenData(addr, number);`
     let cBlock = `CREATE INDEX IX_cTokenData_block ON fuse_data.cTokenData(block);`
     let uAddr  = `CREATE INDEX IX_underData_addr ON fuse_data.underData(addr);`
     let uBlock = `CREATE INDEX IX_underData_block ON fuse_data.underData(block);`;
-    let pChain = `CREATE INDEX IX_poolMetadata_chain ON fuse_data.poolMetadata(chain);`;
+    let pChain = `CREATE INDEX IX_poolMetadata_chain ON fuse_data.poolMetadata(chainid);`;
+    let eData  = `CREATE INDEX IX_eventMetadata_token ON fuse_data.eventMetadata(chainid,ctoken)`;
     await pool.query(cAddr).catch((e: string)  => {return});
     await pool.query(cBlock).catch((e: string) => {return});
     await pool.query(uAddr).catch((e: string)  => {return});
     await pool.query(uBlock).catch((e: string) => {return});
     await pool.query(pChain).catch((e: string) => {return});   
+
+
+    let chains = env.MAINNETS;
+    let over = false;
+    let count = 0;
+    while(true) {
+        let chain = chains[count];
+        if(chain == undefined) break; 
+        let chainId  = env.CHAINS[chain];
+        let network = ntwk.networks[chainId];
+
+        let str = `INSERT INTO fuse_data.networkMetadata(chainid, lastupdated, genesis_block)
+        VALUES($1, $2, $3)
+        ON CONFLICT(chainid) DO NOTHING;`;
+        await pool.query(str, [chainId, network.genesisBlock-network.blocksIn30, network.genesisBlock]);
+
+        count++;
+    }
+    return;
     
 }
