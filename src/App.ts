@@ -13,9 +13,9 @@ app.use("/api", router);
 run();
 async function run() {
     // call migrations 
-    //await migrations();
+    await migrations();
     // call setup
-    //await setup.default();
+    await setup.default();
 
 }
 
