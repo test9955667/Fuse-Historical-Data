@@ -20,17 +20,19 @@ export default async function migrations() {
         block                 BIGINT       NOT NULL,
         addr                  TEXT         NOT NULL,
         supply                DECIMAL(78),
-        borrow                DECIMAL(78)
+        borrow                DECIMAL(78),
+        UNIQUE(chainid,block,addr)
     );
 
-    CREATE TABLE IF NOT EXISTS fuse_data.underlyingData(
+    CREATE TABLE IF NOT EXISTS fuse_data.underlyingdata(
         chainid               INTEGER      NOT NULL,
         datetime              TIMESTAMP    NOT NULL,
         block                 BIGINT       NOT NULL,
-        addr                  TEXT         NOT NULL UNIQUE,
+        addr                  TEXT         NOT NULL,
         ctoken                TEXT         NOT NULL, 
-        supply                DECIMAL(78),
-        borrow                DECIMAL(78)
+        supply                DECIMAL(78)  DEFAULT 0,
+        borrow                DECIMAL(78)  DEFAULT 0,
+        UNIQUE(chainid,datetime,addr,ctoken)
     );
 
     CREATE TABLE IF NOT EXISTS fuse_data.poolMetadata(
@@ -38,7 +40,8 @@ export default async function migrations() {
         datetime              TIMESTAMP    NOT NULL, 
         pool                  TEXT         NOT NULL,
         block                 BIGINT       NOT NULL,  
-        ctokens               TEXT[]
+        ctokens               TEXT[],
+        UNIQUE(chainid, pool)
     );
 
     CREATE TABLE IF NOT EXISTS fuse_data.cTokenMetadata(
@@ -48,14 +51,17 @@ export default async function migrations() {
         pool                  TEXT         NOT NULL,
         name                  TEXT         NOT NULL,
         symbol                TEXT         NOT NULL,
-        lastUpdated           BIGINT       DEFAULT 0
+        lastupdated           BIGINT       DEFAULT 0,
+        startblock            INTEGER      NOT NULL,
+        UNIQUE(chainid,address)
     );
      
 
     CREATE TABLE IF NOT EXISTS fuse_data.underlyingMetadata(
         chainid               INTEGER      NOT NULL,
         underlying            TEXT         NOT NULL,
-        ctokens               TEXT[]
+        ctokens               TEXT[],
+        UNIQUE(chainid,underlying)
     );
     
 
@@ -77,12 +83,14 @@ export default async function migrations() {
     await pool.query(tables);
     
     // unique constriants must be seperate in case of error
-    let cPool = `ALTER TABLE fuse_data.poolMetadata ADD CONSTRAINT chainpool_unq UNIQUE(chainid,pool);`;
-    let cToke = `ALTER TABLE fuse_data.cTokenMetadata ADD CONSTRAINT chainaddr_unq UNIQUE(chainid,address);`;
-    let cUndr = `ALTER TABLE fuse_data.underlyingMetadata ADD CONSTRAINT chainunder_unq UNIQUE(chainid,underlying);`;
-    await pool.query(cPool).catch((e: string) => {return});
-    await pool.query(cToke).catch((e: string) => {return});
-    await pool.query(cUndr).catch((e: string) => {return});
+    console.log("here");
+    //let cPool = `ALTER TABLE fuse_data.poolmetadata ADD CONSTRAINT chainpool_unq UNIQUE(chainid,pool);`;
+    //let cToke = `ALTER TABLE fuse_data.ctokenmetadata ADD CONSTRAINT chainaddr_unq UNIQUE(chainid,address);`;
+    //let cUndr = `ALTER TABLE fuse_data.underlyingmetadata ADD CONSTRAINT chainunder_unq UNIQUE(chainid,underlying);`;
+    //await pool.query(cPool).catch((e: string) => {return});
+    console.log("here2");
+    //await pool.query(cToke).catch((e: string) => {return});
+   // await pool.query(cUndr).catch((e: string) => {return});
 
     // index creations must be seperate in case exists error is thrown
     let cAddr  = `CREATE INDEX IX_cTokenData_addr ON fuse_data.cTokenData(addr, number);`
