@@ -29,13 +29,8 @@ export default async function() {
     let ntwk: network =  NETWORKS[CHAINS[MAINNETS[i]]];
     const web3 = new Web3(new Web3.providers.HttpProvider(ntwk.rpc));
 
-    const testAddr = "0x97fE54066FbB0550fE133aaC0970618485133552";
-
-
 
     let pools = await setAllPools(web3, ntwk);
-
-
 
     await getEventsByBlock(web3, ntwk);
 
@@ -69,13 +64,14 @@ type dirResult = {
 
 // Sets all pools that arent already in the database
 // @return blockPool[] object for historic search to use for chain-queries
-async function setAllPools(web3: Web3, ntwk: network) {
+export async function setAllPools(web3: Web3, ntwk: network) {
     console.log("setting all current pools with data");
     const dir: Contract = new web3.eth.Contract(dirAbi, ntwk.dirAddr);
     // 
     let poolBlockList: blockAddr[] = [];
 
     // list pools and ctokens of pool data in db
+    console.log("here3");
     let data: poolResult[] = (await db.getPoolMetadata(ntwk.id, undefined));
     let dbPools = data.map(d => d.pool);
 
@@ -89,7 +85,7 @@ async function setAllPools(web3: Web3, ntwk: network) {
 
     // gets all pools in the directory, but not yet in db
     pList = pList.filter((a) => !dbPools.includes(a.comptroller));
-    console.log("Getting and setting metadata of all pools");
+    console.log("Getting and setting metadata of all assets...");
     
     for(let j = 0; j < pList.length; j++) {
         const pRes = pList[j];
@@ -109,7 +105,8 @@ async function setAllPools(web3: Web3, ntwk: network) {
             let symbol = await cTok.methods.symbol().call();
             let name = await cTok.methods.name().call();
             
-            await db.setCTokenMetadata(ntwk.id, cToks[i], underlying, pRes.comptroller, name, symbol);
+
+            await db.setCTokenMetadata(ntwk.id, cToks[i], underlying, pRes.comptroller, name, symbol, pRes.blockPosted);
             await db.addCTokenToUnderlying(ntwk.id, underlying, cToks[i]);
 
         }
@@ -121,38 +118,29 @@ async function setAllPools(web3: Web3, ntwk: network) {
 
 }
 
-type blockEvents = {
-    block:  number,
-    events: string[]
-}
+
+
+
 
 // get all events in a 2k block range 
 async function getEventsByBlock(web3: Web3, ntwk: network) {
     console.log("getting every block");
-    let eventsByBlock: blockEvents[] = [];
-    let comps: poolResult[] = await db.getPoolMetadata(ntwk.id, undefined);
+    let cToks = (await db.getCTokenMetadata(ntwk.id, undefined));
     
     let latest = await web3.eth.getBlockNumber();
-    let index = 0;
-    let totalCount = 0;
-    for(let i = 0; i < comps.length; i++) {
+    console.log(cToks.length);
+    for(let i = 0; i < cToks.length; i++) {
 
-        let cToks = comps[i].ctokens;
-        if(cToks.length == 0) continue;
+            let start = cToks[i].lastupdated == 0 ? cToks[i].startblock : Number(cToks[i].lastupdated);
+            
+            let token = new web3.eth.Contract(tokAbi, cToks[i].address);
+            let under = cToks[i].underlying;
+            
 
-        for(let j = 0; j < cToks.length; j++) {
-            let start = comps[i].block-100000;
-            let filteredEvents: number[] = [];
-            let token = new web3.eth.Contract(tokAbi, cToks[j]);
-            let under = (await db.getCTokenMetadata(ntwk.id, cToks[j])).rows[0].underlying;
-
-            let events = await getAllTokenEvents(ntwk.id, cToks[j], start, latest, 400000, token, web3, under);
-
-            totalCount++;
-        }
-
+            await getAllTokenEvents(ntwk.id, cToks[i].address, start, latest, 100000, token, web3, under);
+            return;
     }
-    console.log(totalCount);
+
 }
 
 
@@ -160,7 +148,7 @@ type eventData = {
     totalSupply: bigint,
     totalBorrow: bigint,
     blockNumber: number,
-    timestamp:   string
+    timestamp:   number
 }
 
 
@@ -175,67 +163,111 @@ async function getAllTokenEvents(
     underlying: string
     ) {
     let events: eventData[] = [];
-    let start = startBlock;
-    let end = endBlock;
+    let int   = interval;
     while(true) {
-        start = startBlock;
-        end = endBlock;
+        let start = startBlock;
+        let end   = endBlock;
+
         try {
 
             while(start <= endBlock) {
-                end = start+interval < endBlock ? start+interval : endBlock;
+                end = (start+int < endBlock) ? start+int : endBlock;
+                console.log(end+ " " + start + " " + endBlock);
 
                 let chunk = await getEvents(
-                    chainid, address, 
-                    start+1, end, 
+                    start, end, 
                     events, web3,
-                    token, underlying
+                    token
                 );
+
+                if(chunk === undefined) throw new Error();
 
                 events.concat(chunk);
                 start = end;
-                if(start == endBlock) break;
+                if(start >= endBlock) break;
             }
             break;
             
         }catch (err) {
-            console.log("err");
+           // console.log(err);
             events = [];
-            interval = interval / 2;
+            int = int / 2;
         }
     }
-    return events;
+    
+    let previousBlock = 0;
+    for(let i = 0; i < events.length; i++) {
+        let event = events[i];
+        if(events[i+1] != undefined && event.blockNumber == events[i+1].blockNumber) continue;
+        previousBlock = event.blockNumber;
+
+        try {
+            await db.addTokenData(
+                chainid,
+                event.timestamp,
+                event.blockNumber,
+                address,
+                underlying,
+                event.totalSupply,
+                event.totalBorrow
+            );
+
+            await db.setCTokenLastUpdated(
+                chainid, 
+                address,
+                event.blockNumber
+            );
+
+        } catch (e) {
+            console.log("Error adding data to " + address + " at " + event.blockNumber);
+        }
+    }
+    console.log(address + " " + events.length);
+    return;
 }
 
 
-async function getEvents(
-    chain:  number,
-    token:  string,
+/**
+ * @dev   gets 
+ * @param chain 
+ * @param token 
+ * @param start 
+ * @param end 
+ * @param data 
+ * @param web3 
+ * @param cToken 
+ * @param under 
+ * @returns 
+ */
+export async function getEvents(
     start:  number, 
     end:    number, 
-    data:   eventData[],
+    events: eventData[],
     web3:   Web3,
-    cToken: Contract,
-    under:  string
+    cToken: Contract
     ) {
     
+    let data = events;
+    console.log(start + " " + end);
     if(data.length == 0) {
-        data.push({totalSupply: BigInt(0), totalBorrow: BigInt(0), blockNumber: 0, timestamp: ""});
+        data.push({totalSupply: BigInt(0), totalBorrow: BigInt(0), blockNumber: 0, timestamp: 0});
     }
 
+    try{
+    let eventList = await cToken.getPastEvents('allEvents', {fromBlock: start, toBlock: end});
 
-    let events = await cToken.getPastEvents('allEvents', {fromBlock: start, toBlock: end});
+    for(let i = 0; i < eventList.length; i++) {
+        let curr = eventList[i];
+        let prevData = data[i];
 
-    for(let i = 0; i < events.length; i++) {
-        let curr = events[i];
-        let prevData = data[data.length-1];
-
+        // Update all values to most recent event
         let toAdd: eventData = ({
             totalSupply: prevData.totalSupply, 
             totalBorrow: prevData.totalBorrow, 
             blockNumber: curr.blockNumber,
-            timestamp:   ""
+            timestamp:   0
         });
+
 
         if(curr.event == undefined) { 
             continue;
@@ -260,29 +292,22 @@ async function getEvents(
         } else {
             continue;
         }
-
-        let timestamp = (await web3.eth.getBlock(curr.blockNumber)).timestamp;
-        timestamp = typeof timestamp == "string" ? timestamp : timestamp.toString();
-        toAdd.timestamp = timestamp;
-        data.push(toAdd);
-
-        try{
-        await db.addTokenData(
-            chain, 
-            timestamp,
-            curr.blockNumber,
-            token, 
-            under,
-            toAdd.totalSupply, 
-            toAdd.totalBorrow
-        );
-        db.setCTokenLastUpdated(chain, token, curr.blockNumber);
-        } catch (err) {
-            console.log(err);
-            continue;
+        
+        // TODO: make sure "logIndex" is in order !!!!
+        if(i < eventList.length - 1 && curr.blockNumber != eventList[i+1].blockNumber) {
+            let timestamp = (await web3.eth.getBlock(curr.blockNumber)).timestamp;
+            timestamp = typeof timestamp == "string" ? Number(timestamp) : timestamp;
+            toAdd.timestamp = timestamp;
+            data.push(toAdd);
         }
     }
     return data;
+
+    } catch (e) {
+        console.log(e);
+        throw new Error();
+    }
+
 }
 
 
