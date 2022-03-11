@@ -95,10 +95,10 @@ export async function getchainidMetadata(chainid: number) {
 
 // gets all ctokens from pool or all pools if pool is undefined
 export async function getPoolMetadata(chainid: number, pAddr: string | undefined) {
-    let query = `SELECT * FROM fuse_data.poolMetadata WHERE chainid = $1`;
+    let query = `SELECT * FROM fuse_data.poolmetadata WHERE chainid = $1`;
     let append = `;`;
     
-    if(pAddr != undefined) { append = ` AND pool = '`+pAddr+`';`}
+    if(pAddr != undefined) { append = ` AND pool = ${pAddr};`}
     query += append;
     try{ return (await pool.query(query, [chainid])).rows; }
     catch (err: any) {
@@ -112,13 +112,14 @@ export async function getCTokenMetadata(chainid: number, cAddr: string | undefin
     let query = `SELECT * FROM fuse_data.cTokenMetadata WHERE chainid = $1`;
     let append = `;`;
 
-    if(cAddr != undefined) { append = `AND address = '`+cAddr+`';`}
+    if(cAddr != undefined) { append = `AND address = ${cAddr};`}
     query += append;
 
     try{ return (await pool.query(query, [chainid])).rows; }
     catch (err: any) {
         throw new Error("Error getting cTokensFromPool: " + err);
     }
+    return;
 
 }
 
@@ -172,13 +173,14 @@ export async function addPool(
     stamp: number, 
     cToks: string[]
     ) {
-    let id = chainid+pAddr;
+
     let query = `
-    INSERT INTO fuse_data.poolMetadata(chainid, pool, block, timestamp, ctokens)
-    VALUES ($1, $2, $3, $4, $5)
-    ON CONFLICT ON CONSTRAINT chainidpool_unq DO NOTHING`;
+    INSERT INTO fuse_data.poolmetadata(chainid, datetime, pool, block, ctokens)
+    VALUES ($1, to_timestamp($2), $3, $4, $5)
+    ON CONFLICT(chainid,pool) DO NOTHING
+    ;`;
     try {
-        let q = await pool.query(query, [chainid, pAddr, block, stamp, cToks]);
+        let q = await pool.query(query, [chainid,stamp,pAddr,block,cToks]);
         return q;
     } catch (err: any) {
         throw new Error("Error adding pool: " + err);
@@ -189,7 +191,7 @@ export async function addPool(
 // adds token data to token
 export async function addTokenData(
     chainid:     number, 
-    datetime:    string,
+    datetime:    number,
     block:       number,
     address:     string,
     underlying:  string, 
@@ -200,14 +202,9 @@ export async function addTokenData(
     try {     
         let under = `
             INSERT INTO fuse_data.underlyingdata(chainid,datetime,block,addr,ctoken,supply,borrow)
-            VALUES($1,$2,$3,$4,$5,$6,$7)
+            VALUES($1,to_timestamp($2),$3,$4,$5,$6,$7)
 
-            ON CONFLICT(chainid,datetime,ctoken)
-                DO UPDATE SET
-                    supply = EXCLUDED.supply, 
-                    borrow = EXCLUDED.borrow
-
-            ON CONFLICT(chainid,datetime,addr)
+            ON CONFLICT(chainid,datetime,addr,ctoken)
                 DO UPDATE SET
                 supply = underlyingdata.supply + EXCLUDED.supply, 
                 borrow = underlyingdata.borrow + EXCLUDED.borrow;`;
@@ -218,9 +215,13 @@ export async function addTokenData(
 
 
         let quer = `
-            INSERT INTO
-                fuse_data.ctokendata(chainid, datetime, block, addr, supply, borrow)
-                VALUES(to_timestamp($1),$2,$3,$4,$5,$6);`;
+            INSERT INTO fuse_data.ctokendata(chainid, datetime, block, addr, supply, borrow)
+                VALUES($1,to_timestamp($2),$3,$4,$5,$6)
+
+                ON CONFLICT(chainid,block,addr)
+                    DO UPDATE SET
+                    supply = EXCLUDED.supply,
+                    borrow = EXCLUDED.borrow;`;
 
         await pool.query(
             quer,
@@ -239,18 +240,20 @@ export async function setCTokenMetadata(
     under:  string, 
     pAddr:  string, 
     name:   string,
-    symbol: string
+    symbol: string,
+    startblock: number
     ) {
         let query = `
-        INSERT INTO fuse_data.cTokenMetadata(chainid, address, underlying, pool, name, symbol)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT ON CONSTRAINT chainidaddr_unq DO NOTHING;`;
+        INSERT INTO fuse_data.cTokenMetadata(chainid, address, underlying, pool, name, symbol, startblock)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT(chainid,address) DO NOTHING;`;
 
         try {
-            await pool.query(query, [chainid, cAddr, under, pAddr, name, symbol]);
+            await pool.query(query, [chainid, cAddr, under, pAddr, name, symbol, startblock]);
             return;
         } catch (err: any) {
             throw new Error("error adding cTokenMetadata: " + err);
+            return;
         }
 }
 
@@ -258,8 +261,8 @@ export async function setCTokenLastUpdated(chainid: number, cAddr: string, block
     let str = `
     UPDATE fuse_data.ctokenmetadata
     SET lastupdated = $1
-    WHERE chainid = $2 
-    AND address = $3
+    WHERE (chainid = $2) 
+    AND (address = $3)
     ;`;
 
     try {
@@ -294,7 +297,7 @@ export async function addCTokenToUnderlying(chainid: number, underlying: string,
     let arr: string[] = [];
     let str = `
     INSERT INTO fuse_data.underlyingmetadata (chainid, underlying, ctokens) VALUES($1, $2, $3)
-    ON CONFLICT ON CONSTRAINT chainidunder_unq DO NOTHING;
+    ON CONFLICT(chainid,underlying) DO NOTHING;
     `;
     let str2 = `
     UPDATE fuse_data.underlyingmetadata 
@@ -307,6 +310,7 @@ export async function addCTokenToUnderlying(chainid: number, underlying: string,
         return;
     } catch (err) {
         console.log(err);
+        return;
     }
 
 
